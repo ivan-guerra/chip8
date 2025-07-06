@@ -1,3 +1,5 @@
+use crate::display::{Chip8Display, Chip8TerminalDisplay, FontSprite};
+
 pub struct Chip8Emulator {
     memory: [u8; 4096],
     registers: [u8; 16],
@@ -6,6 +8,7 @@ pub struct Chip8Emulator {
     delay_timer: u8,
     sound_timer: u8,
     keypad: [bool; 16],
+    display: Box<dyn Chip8Display>,
 }
 
 impl Default for Chip8Emulator {
@@ -18,6 +21,7 @@ impl Default for Chip8Emulator {
             delay_timer: 0,
             sound_timer: 0,
             keypad: [false; 16],
+            display: Box::new(Chip8TerminalDisplay::new()),
         }
     }
 }
