@@ -2,7 +2,7 @@
 name = "chip8"
 version = "0.1.0"
 edition = "2024"
+description = "A simple CHIP-8 emulator written in Rust"
 license = "Unlicense"
-author = "Ivan Eduardo Guerra"
 
 [dependencies]
