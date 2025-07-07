@@ -1,39 +1,11 @@
-use crate::components::Chip8Components;
+use crate::state::{Address, ChipState, Register};
 use anyhow::anyhow;
 
-pub struct DecodedInstruction {
-    /// First nibble. Represents the operation code.
-    opcode: u8,
-    /// Second nibble. Used to look up one of the 16 registers.
-    x: u8,
-    /// Third nibble. Used to look up one of the 16 registers.
-    y: u8,
-    /// Fourth nibble. A 4-bit number.
-    n: u8,
-    /// The second byte (third and fourth nibbles). An 8-bit immediate number.
-    nn: u8,
-    /// The second, third, and fourth nibbles. A 12-bit immediate address.
-    nnn: u16,
+pub trait Instruction {
+    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()>;
 }
 
-impl DecodedInstruction {
-    pub fn new(raw: u16) -> Self {
-        DecodedInstruction {
-            opcode: (raw >> 12) as u8,
-            x: ((raw >> 8) & 0x0F) as u8,
-            y: ((raw >> 4) & 0x0F) as u8,
-            n: (raw & 0x0F) as u8,
-            nn: (raw & 0x00FF) as u8,
-            nnn: (raw & 0x0FFF),
-        }
-    }
-}
-
-pub trait Chip8Instruction {
-    fn execute(&self, state: &mut Chip8Components) -> anyhow::Result<()>;
-}
-
-pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Chip8Instruction>> {
+pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Instruction>> {
     let decoded = DecodedInstruction::new(raw);
 
     match decoded.opcode {
@@ -53,65 +25,93 @@ pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Chip8Instruction>> {
     }
 }
 
-pub struct ClearScreen;
+struct DecodedInstruction {
+    /// First nibble. Represents the operation code.
+    opcode: u8,
+    /// Second nibble. Used to look up one of the 16 registers.
+    x: usize,
+    /// Third nibble. Used to look up one of the 16 registers.
+    y: usize,
+    /// Fourth nibble. A 4-bit number.
+    n: u8,
+    /// The second byte (third and fourth nibbles). An 8-bit immediate number.
+    nn: u8,
+    /// The second, third, and fourth nibbles. A 12-bit immediate address.
+    nnn: Address,
+}
+impl DecodedInstruction {
+    fn new(raw: u16) -> Self {
+        DecodedInstruction {
+            opcode: (raw >> 12) as u8,
+            x: ((raw >> 8) & 0x0F) as usize,
+            y: ((raw >> 4) & 0x0F) as usize,
+            n: (raw & 0x0F) as u8,
+            nn: (raw & 0x00FF) as u8,
+            nnn: (raw & 0x0FFF) as usize,
+        }
+    }
+}
 
-impl Chip8Instruction for ClearScreen {
-    fn execute(&self, state: &mut Chip8Components) -> anyhow::Result<()> {
+struct ClearScreen;
+impl Instruction for ClearScreen {
+    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
         state.display.clear();
         Ok(())
     }
 }
 
-pub struct Jump(DecodedInstruction);
-
-impl Chip8Instruction for Jump {
-    fn execute(&self, state: &mut Chip8Components) -> anyhow::Result<()> {
-        state.pc = self.0.nnn as usize;
+struct Jump(DecodedInstruction);
+impl Instruction for Jump {
+    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+        state.pc = self.0.nnn;
         Ok(())
     }
 }
 
-pub struct Set(DecodedInstruction);
-
-impl Chip8Instruction for Set {
-    fn execute(&self, state: &mut Chip8Components) -> anyhow::Result<()> {
-        state.registers[self.0.x as usize] = self.0.nn;
+struct Set(DecodedInstruction);
+impl Instruction for Set {
+    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+        state
+            .registers
+            .write(Register::from_index(self.0.x)?, self.0.nn);
         Ok(())
     }
 }
 
-pub struct Add(DecodedInstruction);
-
-impl Chip8Instruction for Add {
-    fn execute(&self, state: &mut Chip8Components) -> anyhow::Result<()> {
-        let reg_x = &mut state.registers[self.0.x as usize];
-        *reg_x = reg_x.wrapping_add(self.0.nn);
+struct Add(DecodedInstruction);
+impl Instruction for Add {
+    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+        let reg_x = Register::from_index(self.0.x)?;
+        let reg_x_val = state.registers.read(reg_x);
+        state
+            .registers
+            .write(reg_x, reg_x_val.wrapping_add(self.0.nn));
         Ok(())
     }
 }
 
-pub struct SetIndex(DecodedInstruction);
-
-impl Chip8Instruction for SetIndex {
-    fn execute(&self, state: &mut Chip8Components) -> anyhow::Result<()> {
-        state.index = self.0.nnn as usize;
+struct SetIndex(DecodedInstruction);
+impl Instruction for SetIndex {
+    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+        state.index = self.0.nnn;
         Ok(())
     }
 }
 
-pub struct Display(DecodedInstruction);
+struct Display(DecodedInstruction);
+impl Instruction for Display {
+    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+        let x = state.registers.read(Register::from_index(self.0.x)?);
+        let y = state.registers.read(Register::from_index(self.0.y)?);
+        let sprite = state.memory.read_sprite(state.index, self.0.n)?;
 
-impl Chip8Instruction for Display {
-    fn execute(&self, state: &mut Chip8Components) -> anyhow::Result<()> {
-        let x = state.registers[self.0.x as usize] as usize;
-        let y = state.registers[self.0.y as usize] as usize;
-        let sprite = &state.memory[state.index..state.index + self.0.n as usize];
-
-        if state.display.draw_sprite(x, y, sprite) {
-            // If there was a collision, set the VF register
-            state.registers[0xF] = 1;
+        if state
+            .display
+            .draw_sprite(usize::from(x), usize::from(y), sprite)
+        {
+            state.registers.write(Register::VF, 1);
         } else {
-            state.registers[0xF] = 0;
+            state.registers.write(Register::VF, 0);
         }
         Ok(())
     }

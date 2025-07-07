@@ -3,18 +3,17 @@ use bitvec::{array::BitArray, BitArr};
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
 
-pub trait Chip8Display {
+pub trait Display {
     fn clear(&mut self);
     fn draw_sprite(&mut self, x: usize, y: usize, sprite: &[u8]) -> bool;
 }
 
-pub struct Chip8TerminalDisplay {
+pub struct TerminalDisplay {
     pixels: BitArr!(for DISPLAY_WIDTH * DISPLAY_HEIGHT),
 }
-
-impl Chip8TerminalDisplay {
+impl TerminalDisplay {
     pub fn new() -> Self {
-        Chip8TerminalDisplay {
+        TerminalDisplay {
             pixels: BitArray::ZERO,
         }
     }
@@ -33,8 +32,7 @@ impl Chip8TerminalDisplay {
         }
     }
 }
-
-impl Chip8Display for Chip8TerminalDisplay {
+impl Display for TerminalDisplay {
     fn clear(&mut self) {
         self.pixels.fill(false);
     }
