@@ -7,6 +7,8 @@ pub type CallStack = Vec<Address>;
 
 pub const MEM_SIZE: usize = 4096;
 pub const FONT_ADDR: Address = 0x50;
+pub const FONT_WIDTH: usize = 4;
+pub const FONT_HEIGHT: usize = 5;
 pub const PC_START_ADDR: Address = 0x200;
 pub const NUM_KEYS: usize = 16;
 pub const NUM_REGISTERS: usize = 16;
