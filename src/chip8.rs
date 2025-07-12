@@ -127,6 +127,7 @@ impl Emulator {
                                 self.state.memory.load_rom(&rom_data)?;
                                 app_state = AppState::Running;
                             } else if key.code == KeyCode::Esc {
+                                terminal.clear()?;
                                 break 'mainloop;
                             }
                         }
