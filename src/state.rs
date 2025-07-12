@@ -1,5 +1,8 @@
+use std::path::PathBuf;
+
 use anyhow::anyhow;
 use bitvec::{array::BitArray, BitArr};
+use clap::ValueEnum;
 
 pub type Timer = u8;
 pub type Address = usize;
@@ -12,6 +15,7 @@ pub const PC_START_ADDR: Address = 0x200;
 pub const NUM_REGISTERS: usize = 16;
 pub const DISPLAY_WIDTH: usize = 64;
 pub const DISPLAY_HEIGHT: usize = 32;
+pub const DEFAULT_FRAME_RATE: f64 = 60.0;
 
 pub struct Memory {
     data: [u8; MEM_SIZE],
@@ -208,7 +212,29 @@ impl Keypad {
     }
 }
 
+#[derive(Debug, Clone, ValueEnum)]
+pub enum ChipMode {
+    Comsac,
+    SuperChip,
+}
+
+pub struct Settings {
+    pub mode: ChipMode,
+    pub frame_rate: f64,
+    pub rom: PathBuf,
+}
+impl Settings {
+    pub fn new(mode: ChipMode, frame_rate: f64, rom: String) -> Self {
+        Settings {
+            mode,
+            frame_rate,
+            rom: rom.into(),
+        }
+    }
+}
+
 pub struct Chip8State {
+    pub settings: Settings,
     pub memory: Memory,
     pub registers: RegisterBank,
     pub pc: Address,
@@ -219,9 +245,10 @@ pub struct Chip8State {
     pub display: BitArr!(for DISPLAY_WIDTH * DISPLAY_HEIGHT),
     pub keypad: Keypad,
 }
-impl Default for Chip8State {
-    fn default() -> Self {
+impl Chip8State {
+    pub fn new(settings: Settings) -> Self {
         Chip8State {
+            settings,
             memory: Memory::new(),
             registers: RegisterBank::new(),
             pc: PC_START_ADDR,
@@ -233,8 +260,7 @@ impl Default for Chip8State {
             keypad: Keypad::new(),
         }
     }
-}
-impl Chip8State {
+
     pub fn reset(&mut self) {
         self.memory = Memory::new();
         self.registers = RegisterBank::new();

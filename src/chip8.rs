@@ -1,5 +1,5 @@
 use crate::instruction::{decode, Instruction};
-use crate::state::{Chip8State, Key, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
+use crate::state::{Chip8State, Key, Settings, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
 use anyhow::anyhow;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
@@ -8,19 +8,13 @@ use ratatui::layout::Alignment;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Terminal;
-use std::{
-    path::PathBuf,
-    time::{Duration, Instant},
-};
-
-const DEFAULT_FPS: f64 = 60.0;
+use std::time::{Duration, Instant};
 
 enum AppState {
     Splash,
     Running,
 }
 
-#[derive(Default)]
 pub struct Emulator {
     state: Chip8State,
 }
@@ -77,14 +71,22 @@ impl Emulator {
         decode((high_byte << 8) | low_byte)
     }
 
-    pub fn run(&mut self, rom: PathBuf) -> anyhow::Result<()> {
-        let target_fps = DEFAULT_FPS; // TODO: Make this configurable
-        let frame_duration = Duration::from_secs_f64(1.0 / target_fps);
-        let rom_stem: String = rom
+    pub fn new(settings: Settings) -> Self {
+        Emulator {
+            state: Chip8State::new(settings),
+        }
+    }
+
+    pub fn run(&mut self) -> anyhow::Result<()> {
+        let frame_duration = Duration::from_secs_f64(1.0 / self.state.settings.frame_rate);
+        let rom_stem: String = self
+            .state
+            .settings
+            .rom
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Unknown ROM".to_string());
-        let rom_data = std::fs::read(rom)?;
+        let rom_data = std::fs::read(self.state.settings.rom.clone())?;
 
         enable_raw_mode()?;
         let stdout = std::io::stdout();
