@@ -8,10 +8,58 @@ use ratatui::layout::Alignment;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Terminal;
-use std::time::{Duration, Instant};
+use rodio::{source::SineWave, OutputStream, OutputStreamHandle, Sink};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use std::time::Instant;
+
+/// A simple toggleable beep (square wave) for CHIP-8
+pub struct Beep {
+    sink: Arc<Mutex<Option<Sink>>>,
+    #[allow(dead_code)]
+    stream: OutputStream,
+    stream_handle: OutputStreamHandle,
+    freq: u32,
+}
+
+impl Beep {
+    /// Create a new Beep at the given frequency (Hz)
+    pub fn new(freq: u32) -> Self {
+        let (stream, stream_handle) = OutputStream::try_default().unwrap();
+        Self {
+            sink: Arc::new(Mutex::new(None)),
+            stream,
+            stream_handle,
+            freq,
+        }
+    }
+
+    /// Start the beep (if not already beeping)
+    pub fn on(&self) {
+        let mut sink_guard = self.sink.lock().unwrap();
+        if sink_guard.is_some() {
+            // Already beeping
+            return;
+        }
+        let sink = Sink::try_new(&self.stream_handle).unwrap();
+        // SineWave is infinite, so as long as sink is alive, it beeps
+        sink.append(SineWave::new(self.freq as f32));
+        sink.play();
+        *sink_guard = Some(sink);
+    }
+
+    /// Stop the beep
+    pub fn off(&self) {
+        let mut sink_guard = self.sink.lock().unwrap();
+        if let Some(sink) = sink_guard.take() {
+            sink.stop();
+        }
+    }
+}
 
 pub struct Emulator {
     state: Chip8State,
+    beeper: Beep,
 }
 
 impl Emulator {
@@ -93,6 +141,7 @@ impl Emulator {
     pub fn new(settings: Settings) -> Self {
         Emulator {
             state: Chip8State::new(settings),
+            beeper: Beep::new(440),
         }
     }
 
@@ -181,6 +230,11 @@ impl Emulator {
             terminal.try_draw(|frame| -> std::io::Result<()> {
                 self.state.delay_timer = self.state.delay_timer.saturating_sub(1);
                 self.state.sound_timer = self.state.sound_timer.saturating_sub(1);
+                if self.state.sound_timer == 0 {
+                    self.beeper.off();
+                } else {
+                    self.beeper.on();
+                }
 
                 for _ in 0..=instructions_per_frame {
                     let instruction = self
