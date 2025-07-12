@@ -132,8 +132,8 @@ impl Emulator {
                         }
                         AppState::Running => match key.code {
                             KeyCode::Esc => {
-                                app_state = AppState::Splash;
-                                self.state.reset();
+                                terminal.clear()?;
+                                break 'mainloop;
                             }
                             KeyCode::Char('1') => {
                                 self.state.keypad.press_key(Key::Key1);
