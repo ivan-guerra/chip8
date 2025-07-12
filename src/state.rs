@@ -212,7 +212,7 @@ impl Keypad {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, PartialEq)]
 pub enum ChipMode {
     Comsac,
     SuperChip,

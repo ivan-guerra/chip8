@@ -1,4 +1,4 @@
-use crate::state::{Address, Chip8State, Key, Register, FONT_ADDR, FONT_HEIGHT};
+use crate::state::{Address, Chip8State, ChipMode, Key, Register, FONT_ADDR, FONT_HEIGHT};
 use anyhow::anyhow;
 
 pub trait Instruction {
@@ -299,13 +299,17 @@ impl Instruction for SubtractXFromY {
 struct RightShift(DecodedInstruction);
 impl Instruction for RightShift {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
-        // TODO: Make this configurable.
         let reg_x = Register::from_index(self.0.x)?;
-        let reg_y = Register::from_index(self.0.y)?;
-        let value_y = state.registers.read(reg_y);
+        let mut value_x = state.registers.read(reg_x);
 
-        state.registers.write(reg_x, value_y >> 1);
-        state.registers.write(Register::VF, value_y & 0x01); // Set VF to LSB before shift
+        if state.settings.mode == ChipMode::Comsac {
+            let reg_y = Register::from_index(self.0.y)?;
+            let value_y = state.registers.read(reg_y);
+            value_x = value_y; // In SuperChip, right shift uses the value of VY
+        }
+
+        state.registers.write(reg_x, value_x >> 1);
+        state.registers.write(Register::VF, value_x & 0x01); // Set VF to LSB before shift
         Ok(())
     }
 }
@@ -313,13 +317,17 @@ impl Instruction for RightShift {
 struct LeftShift(DecodedInstruction);
 impl Instruction for LeftShift {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
-        // TODO: Make this configurable.
         let reg_x = Register::from_index(self.0.x)?;
-        let reg_y = Register::from_index(self.0.y)?;
-        let value_y = state.registers.read(reg_y);
+        let mut value_x = state.registers.read(reg_x);
 
-        state.registers.write(reg_x, value_y << 1);
-        state.registers.write(Register::VF, (value_y & 0x80) >> 7); // Set VF to MSB before shift
+        if state.settings.mode == ChipMode::Comsac {
+            let reg_y = Register::from_index(self.0.y)?;
+            let value_y = state.registers.read(reg_y);
+            value_x = value_y; // In SuperChip, left shift uses the value of VY
+        }
+
+        state.registers.write(reg_x, value_x << 1);
+        state.registers.write(Register::VF, value_x & 0x01); // Set VF to LSB before shift
         Ok(())
     }
 }
@@ -335,10 +343,16 @@ impl Instruction for SetIndex {
 struct JumpWithOffset(DecodedInstruction);
 impl Instruction for JumpWithOffset {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
-        state.pc = usize::from(state.registers.read(Register::V0)) + self.0.nnn;
-        // TODO: Make this configurable. The code below is how the CHIP-48 and SUPER-CHIP behave.
-        //let reg_x = Register::from_index(self.0.x)?;
-        //state.pc = (state.registers.read(reg_x) as usize + self.0.nnn);
+        match state.settings.mode {
+            ChipMode::Comsac => {
+                state.pc = usize::from(state.registers.read(Register::V0)) + self.0.nnn;
+            }
+            ChipMode::SuperChip => {
+                let reg_x = Register::from_index(self.0.x)?;
+                let value_x = state.registers.read(reg_x);
+                state.pc = usize::from(value_x) + self.0.nnn;
+            }
+        }
         Ok(())
     }
 }
@@ -460,7 +474,6 @@ impl Instruction for BinaryCodedDecimal {
 
 struct Store(DecodedInstruction);
 impl Instruction for Store {
-    // TODO: Make this configurable so that in the alternative mode it updates index.
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let index_rng = state.index..=state.index + self.0.x;
         let reg_rng = 0..=self.0.x;
@@ -470,6 +483,10 @@ impl Instruction for Store {
             let value = state.registers.read(reg);
             state.memory.write(i, value)?;
         }
+
+        if state.settings.mode == ChipMode::Comsac {
+            state.index = state.index.wrapping_add(self.0.x + 1);
+        }
         Ok(())
     }
 }
@@ -477,11 +494,14 @@ impl Instruction for Store {
 struct Load(DecodedInstruction);
 impl Instruction for Load {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
-        // TODO: Make this configurable so that in the alternative mode it updates index.
         for i in 0..=self.0.x {
             let reg = Register::from_index(i)?;
             let value = state.registers.read(reg);
             state.memory.write(state.index + i, value)?;
+        }
+
+        if state.settings.mode == ChipMode::Comsac {
+            state.index = state.index.wrapping_add(self.0.x + 1);
         }
         Ok(())
     }
