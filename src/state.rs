@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::anyhow;
-use bitvec::{array::BitArray, BitArr};
+use bitvec::{BitArr, array::BitArray};
 
 pub type Timer = u8;
 pub type Address = usize;
@@ -15,6 +15,7 @@ pub const NUM_REGISTERS: usize = 16;
 pub const DISPLAY_WIDTH: usize = 64;
 pub const DISPLAY_HEIGHT: usize = 32;
 pub const DEFAULT_FRAME_RATE: u64 = 60;
+pub const DEFAULT_INSTRUCTIONS_PER_SECOND: u64 = 700;
 
 pub struct Memory {
     data: [u8; MEM_SIZE],
@@ -213,12 +214,14 @@ impl Keypad {
 
 pub struct Settings {
     pub frame_rate: u64,
+    pub ips: u64,
     pub rom: PathBuf,
 }
 impl Settings {
-    pub fn new(frame_rate: u64, rom: String) -> Self {
+    pub fn new(frame_rate: u64, ips: u64, rom: String) -> Self {
         Settings {
             frame_rate,
+            ips,
             rom: rom.into(),
         }
     }

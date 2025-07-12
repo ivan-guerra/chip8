@@ -1,13 +1,13 @@
-use crate::instruction::{decode, Instruction};
-use crate::state::{Chip8State, Key, Settings, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
+use crate::instruction::{Instruction, decode};
+use crate::state::{Chip8State, DISPLAY_HEIGHT, DISPLAY_WIDTH, Key, MEM_SIZE, Settings};
 use anyhow::anyhow;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Alignment;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
-use ratatui::Terminal;
 use std::time::{Duration, Instant};
 
 enum AppState {
@@ -79,8 +79,7 @@ impl Emulator {
 
     pub fn run(&mut self) -> anyhow::Result<()> {
         let frame_duration = Duration::from_secs_f64(1.0 / self.state.settings.frame_rate as f64);
-        let instructions_per_second = 700;
-        let instructions_per_frame = instructions_per_second / self.state.settings.frame_rate;
+        let instructions_per_frame = self.state.settings.ips / self.state.settings.frame_rate;
         let rom_stem: String = self
             .state
             .settings
