@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use anyhow::anyhow;
 use bitvec::{array::BitArray, BitArr};
-use clap::ValueEnum;
 
 pub type Timer = u8;
 pub type Address = usize;
@@ -212,21 +211,13 @@ impl Keypad {
     }
 }
 
-#[derive(Debug, Clone, ValueEnum, PartialEq)]
-pub enum ChipMode {
-    Comsac,
-    SuperChip,
-}
-
 pub struct Settings {
-    pub mode: ChipMode,
     pub frame_rate: f64,
     pub rom: PathBuf,
 }
 impl Settings {
-    pub fn new(mode: ChipMode, frame_rate: f64, rom: String) -> Self {
+    pub fn new(frame_rate: f64, rom: String) -> Self {
         Settings {
-            mode,
             frame_rate,
             rom: rom.into(),
         }

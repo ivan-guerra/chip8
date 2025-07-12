@@ -1,6 +1,5 @@
 use crate::state::{
-    Address, Chip8State, ChipMode, Key, Register, DISPLAY_HEIGHT, DISPLAY_WIDTH, FONT_ADDR,
-    FONT_HEIGHT,
+    Address, Chip8State, Key, Register, DISPLAY_HEIGHT, DISPLAY_WIDTH, FONT_ADDR, FONT_HEIGHT,
 };
 use anyhow::anyhow;
 
@@ -216,9 +215,7 @@ impl Instruction for BinaryOr {
         let value_y = state.registers.read(reg_y);
 
         state.registers.write(reg_x, value_x | value_y);
-        if state.settings.mode == ChipMode::Comsac {
-            state.registers.write(Register::VF, 0);
-        }
+        state.registers.write(Register::VF, 0);
         Ok(())
     }
 }
@@ -232,9 +229,7 @@ impl Instruction for BinaryAnd {
         let value_y = state.registers.read(reg_y);
 
         state.registers.write(reg_x, value_x & value_y);
-        if state.settings.mode == ChipMode::Comsac {
-            state.registers.write(Register::VF, 0);
-        }
+        state.registers.write(Register::VF, 0);
         Ok(())
     }
 }
@@ -248,9 +243,7 @@ impl Instruction for LogicalXor {
         let value_y = state.registers.read(reg_y);
 
         state.registers.write(reg_x, value_x ^ value_y);
-        if state.settings.mode == ChipMode::Comsac {
-            state.registers.write(Register::VF, 0);
-        }
+        state.registers.write(Register::VF, 0);
         Ok(())
     }
 }
@@ -316,13 +309,9 @@ struct RightShift(DecodedInstruction);
 impl Instruction for RightShift {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
-        let mut value_x = state.registers.read(reg_x);
-
-        if state.settings.mode == ChipMode::Comsac {
-            let reg_y = Register::from_index(self.0.y)?;
-            let value_y = state.registers.read(reg_y);
-            value_x = value_y; // In SuperChip, right shift uses the value of VY
-        }
+        let reg_y = Register::from_index(self.0.y)?;
+        let value_y = state.registers.read(reg_y);
+        let value_x = value_y;
 
         state.registers.write(reg_x, value_x >> 1);
         state.registers.write(Register::VF, value_x & 0x01); // Set VF to LSB before shift
@@ -334,13 +323,9 @@ struct LeftShift(DecodedInstruction);
 impl Instruction for LeftShift {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
-        let mut value_x = state.registers.read(reg_x);
-
-        if state.settings.mode == ChipMode::Comsac {
-            let reg_y = Register::from_index(self.0.y)?;
-            let value_y = state.registers.read(reg_y);
-            value_x = value_y; // In SuperChip, left shift uses the value of VY
-        }
+        let reg_y = Register::from_index(self.0.y)?;
+        let value_y = state.registers.read(reg_y);
+        let value_x = value_y;
 
         state.registers.write(reg_x, value_x << 1);
         state.registers.write(Register::VF, (value_x & 0x80) >> 7); // Set VF to MSB before shift
@@ -359,16 +344,7 @@ impl Instruction for SetIndex {
 struct JumpWithOffset(DecodedInstruction);
 impl Instruction for JumpWithOffset {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
-        match state.settings.mode {
-            ChipMode::Comsac => {
-                state.pc = usize::from(state.registers.read(Register::V0)) + self.0.nnn;
-            }
-            ChipMode::SuperChip => {
-                let reg_x = Register::from_index(self.0.x)?;
-                let value_x = state.registers.read(reg_x);
-                state.pc = usize::from(value_x) + self.0.nnn;
-            }
-        }
+        state.pc = usize::from(state.registers.read(Register::V0)) + self.0.nnn;
         Ok(())
     }
 }
@@ -504,10 +480,7 @@ impl Instruction for Store {
             let value = state.registers.read(reg);
             state.memory.write(i, value)?;
         }
-
-        if state.settings.mode == ChipMode::Comsac {
-            state.index = state.index.wrapping_add(self.0.x + 1);
-        }
+        state.index = state.index.wrapping_add(self.0.x + 1);
         Ok(())
     }
 }
@@ -520,10 +493,7 @@ impl Instruction for Load {
             let reg = Register::from_index(i)?;
             state.registers.write(reg, value);
         }
-
-        if state.settings.mode == ChipMode::Comsac {
-            state.index = state.index.wrapping_add(self.0.x + 1);
-        }
+        state.index = state.index.wrapping_add(self.0.x + 1);
         Ok(())
     }
 }
