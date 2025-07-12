@@ -102,6 +102,9 @@ impl Emulator {
                         Ok(())
                     }
                     AppState::Running => {
+                        self.state.delay_timer = self.state.delay_timer.saturating_sub(1);
+                        self.state.sound_timer = self.state.sound_timer.saturating_sub(1);
+
                         let instruction = self
                             .fetch_instruction()
                             .map_err(|e| std::io::Error::other(e.to_string()))?;
