@@ -1,4 +1,7 @@
-use crate::state::{Address, Chip8State, ChipMode, Key, Register, FONT_ADDR, FONT_HEIGHT};
+use crate::state::{
+    Address, Chip8State, ChipMode, Key, Register, DISPLAY_HEIGHT, DISPLAY_WIDTH, FONT_ADDR,
+    FONT_HEIGHT,
+};
 use anyhow::anyhow;
 
 pub trait Instruction {
@@ -211,7 +214,11 @@ impl Instruction for BinaryOr {
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
         let value_y = state.registers.read(reg_y);
+
         state.registers.write(reg_x, value_x | value_y);
+        if state.settings.mode == ChipMode::Comsac {
+            state.registers.write(Register::VF, 0);
+        }
         Ok(())
     }
 }
@@ -223,7 +230,11 @@ impl Instruction for BinaryAnd {
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
         let value_y = state.registers.read(reg_y);
+
         state.registers.write(reg_x, value_x & value_y);
+        if state.settings.mode == ChipMode::Comsac {
+            state.registers.write(Register::VF, 0);
+        }
         Ok(())
     }
 }
@@ -235,7 +246,11 @@ impl Instruction for LogicalXor {
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
         let value_y = state.registers.read(reg_y);
+
         state.registers.write(reg_x, value_x ^ value_y);
+        if state.settings.mode == ChipMode::Comsac {
+            state.registers.write(Register::VF, 0);
+        }
         Ok(())
     }
 }
@@ -374,7 +389,12 @@ impl Instruction for Display {
         let x = state.registers.read(Register::from_index(self.0.x)?);
         let y = state.registers.read(Register::from_index(self.0.y)?);
 
-        if state.draw_sprite(usize::from(x), usize::from(y), self.0.n)? {
+        state.registers.write(Register::VF, 0);
+        if state.draw_sprite(
+            usize::from(x) % DISPLAY_WIDTH,
+            usize::from(y) % DISPLAY_HEIGHT,
+            self.0.n,
+        )? {
             state.registers.write(Register::VF, 1);
         } else {
             state.registers.write(Register::VF, 0);
