@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::anyhow;
-use bitvec::{BitArr, array::BitArray};
+use bitvec::{array::BitArray, BitArr};
 
 pub type Timer = u8;
 pub type Address = usize;
@@ -253,17 +253,6 @@ impl Chip8State {
             display: BitArray::ZERO,
             keypad: Keypad::new(),
         }
-    }
-
-    pub fn reset(&mut self) {
-        self.memory = Memory::new();
-        self.registers = RegisterBank::new();
-        self.pc = PC_START_ADDR;
-        self.index = 0;
-        self.stack.clear();
-        self.delay_timer = 0;
-        self.sound_timer = 0;
-        self.display.fill(false);
     }
 
     pub fn clear_display(&mut self) {

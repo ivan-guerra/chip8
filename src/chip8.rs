@@ -10,22 +10,43 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Terminal;
 use std::time::{Duration, Instant};
 
-enum AppState {
-    Splash,
-    Running,
-}
-
 pub struct Emulator {
     state: Chip8State,
 }
 
 impl Emulator {
-    fn draw_frame(
-        &mut self,
-        frame: &mut ratatui::Frame,
-        area: ratatui::layout::Rect,
-        rom_name: &str,
-    ) {
+    fn draw(&mut self, frame: &mut ratatui::Frame, area: ratatui::layout::Rect, rom_name: &str) {
+        use ratatui::layout::{Constraint, Direction, Layout};
+
+        // Calculate the exact size needed for 64x32 display plus borders
+        let game_width = (DISPLAY_WIDTH as u16) + 2; // +2 for left and right borders
+        let game_height = (DISPLAY_HEIGHT as u16) + 2; // +2 for top and bottom borders
+
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(game_height), // Exact size for game area
+                Constraint::Length(6),           // Key mapping area
+                Constraint::Min(0),              // Remaining space
+            ])
+            .split(area);
+
+        // Center the game horizontally if the terminal is wider than needed
+        let game_area = if chunks[0].width > game_width {
+            let horizontal_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Min(0),
+                    Constraint::Length(game_width),
+                    Constraint::Min(0),
+                ])
+                .split(chunks[0]);
+            horizontal_chunks[1]
+        } else {
+            chunks[0]
+        };
+
+        // Draw main game screen
         let mut row_string = String::with_capacity(DISPLAY_WIDTH * DISPLAY_HEIGHT + DISPLAY_HEIGHT);
         for row_idx in 0..DISPLAY_HEIGHT {
             for col_idx in 0..DISPLAY_WIDTH {
@@ -38,24 +59,22 @@ impl Emulator {
             }
             row_string.push('\n');
         }
-        let paragraph = Paragraph::new(row_string)
+        let game_paragraph = Paragraph::new(row_string)
             .block(Block::default().borders(Borders::ALL).title(rom_name))
             .style(Style::default().fg(Color::White));
-        frame.render_widget(paragraph, area);
-    }
+        frame.render_widget(game_paragraph, game_area);
 
-    fn draw_splash(&self, frame: &mut ratatui::Frame) {
-        let area = frame.area();
-        let msg = "Welcome to CHIP-8\nPress Enter to start";
-        let paragraph = Paragraph::new(msg)
+        // Draw key mapping
+        let key_mapping = "Key Mapping:\n\
+    1 2 3 4    →    1 2 3 C\n\
+    Q W E R    →    4 5 6 D\n\
+    A S D F    →    7 8 9 E\n\
+    Z X C V    →    A 0 B F";
+        let key_paragraph = Paragraph::new(key_mapping)
             .alignment(Alignment::Center)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("CHIP-8 Emulator"),
-            )
-            .style(Style::default().fg(Color::Cyan));
-        frame.render_widget(paragraph, area);
+            .block(Block::default().borders(Borders::ALL).title("Keypad"))
+            .style(Style::default().fg(Color::Yellow));
+        frame.render_widget(key_paragraph, chunks[1]);
     }
 
     fn fetch_instruction(&mut self) -> anyhow::Result<Box<dyn Instruction>> {
@@ -93,107 +112,88 @@ impl Emulator {
         let stdout = std::io::stdout();
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
-        let mut app_state = AppState::Splash;
+        terminal.clear()?;
 
+        self.state.memory.load_rom(&rom_data)?;
         'mainloop: loop {
             let frame_start = Instant::now();
 
             if event::poll(std::time::Duration::ZERO)? {
                 if let Event::Key(key) = event::read()? {
-                    match app_state {
-                        AppState::Splash => {
-                            if key.code == KeyCode::Enter {
-                                self.state.reset();
-                                self.state.memory.load_rom(&rom_data)?;
-                                app_state = AppState::Running;
-                            } else if key.code == KeyCode::Esc {
-                                terminal.clear()?;
-                                break 'mainloop;
-                            }
+                    match key.code {
+                        KeyCode::Esc => {
+                            terminal.clear()?;
+                            break 'mainloop;
                         }
-                        AppState::Running => match key.code {
-                            KeyCode::Esc => {
-                                terminal.clear()?;
-                                break 'mainloop;
-                            }
-                            KeyCode::Char('1') => {
-                                self.state.keypad.press_key(Key::Key1);
-                            }
-                            KeyCode::Char('2') => {
-                                self.state.keypad.press_key(Key::Key2);
-                            }
-                            KeyCode::Char('3') => {
-                                self.state.keypad.press_key(Key::Key3);
-                            }
-                            KeyCode::Char('4') => {
-                                self.state.keypad.press_key(Key::KeyC);
-                            }
-                            KeyCode::Char('q') => {
-                                self.state.keypad.press_key(Key::Key4);
-                            }
-                            KeyCode::Char('w') => {
-                                self.state.keypad.press_key(Key::Key5);
-                            }
-                            KeyCode::Char('e') => {
-                                self.state.keypad.press_key(Key::Key6);
-                            }
-                            KeyCode::Char('r') => {
-                                self.state.keypad.press_key(Key::KeyD);
-                            }
-                            KeyCode::Char('a') => {
-                                self.state.keypad.press_key(Key::Key7);
-                            }
-                            KeyCode::Char('s') => {
-                                self.state.keypad.press_key(Key::Key8);
-                            }
-                            KeyCode::Char('d') => {
-                                self.state.keypad.press_key(Key::Key9);
-                            }
-                            KeyCode::Char('f') => {
-                                self.state.keypad.press_key(Key::KeyE);
-                            }
-                            KeyCode::Char('z') => {
-                                self.state.keypad.press_key(Key::KeyA);
-                            }
-                            KeyCode::Char('x') => {
-                                self.state.keypad.press_key(Key::Key0);
-                            }
-                            KeyCode::Char('c') => {
-                                self.state.keypad.press_key(Key::KeyB);
-                            }
-                            KeyCode::Char('v') => {
-                                self.state.keypad.press_key(Key::KeyF);
-                            }
-                            _ => {}
-                        },
+                        KeyCode::Char('1') => {
+                            self.state.keypad.press_key(Key::Key1);
+                        }
+                        KeyCode::Char('2') => {
+                            self.state.keypad.press_key(Key::Key2);
+                        }
+                        KeyCode::Char('3') => {
+                            self.state.keypad.press_key(Key::Key3);
+                        }
+                        KeyCode::Char('4') => {
+                            self.state.keypad.press_key(Key::KeyC);
+                        }
+                        KeyCode::Char('q') => {
+                            self.state.keypad.press_key(Key::Key4);
+                        }
+                        KeyCode::Char('w') => {
+                            self.state.keypad.press_key(Key::Key5);
+                        }
+                        KeyCode::Char('e') => {
+                            self.state.keypad.press_key(Key::Key6);
+                        }
+                        KeyCode::Char('r') => {
+                            self.state.keypad.press_key(Key::KeyD);
+                        }
+                        KeyCode::Char('a') => {
+                            self.state.keypad.press_key(Key::Key7);
+                        }
+                        KeyCode::Char('s') => {
+                            self.state.keypad.press_key(Key::Key8);
+                        }
+                        KeyCode::Char('d') => {
+                            self.state.keypad.press_key(Key::Key9);
+                        }
+                        KeyCode::Char('f') => {
+                            self.state.keypad.press_key(Key::KeyE);
+                        }
+                        KeyCode::Char('z') => {
+                            self.state.keypad.press_key(Key::KeyA);
+                        }
+                        KeyCode::Char('x') => {
+                            self.state.keypad.press_key(Key::Key0);
+                        }
+                        KeyCode::Char('c') => {
+                            self.state.keypad.press_key(Key::KeyB);
+                        }
+                        KeyCode::Char('v') => {
+                            self.state.keypad.press_key(Key::KeyF);
+                        }
+                        _ => {}
                     }
                 }
             }
 
             terminal.try_draw(|frame| -> std::io::Result<()> {
-                match app_state {
-                    AppState::Splash => {
-                        self.draw_splash(frame);
-                        Ok(())
-                    }
-                    AppState::Running => {
-                        self.state.delay_timer = self.state.delay_timer.saturating_sub(1);
-                        self.state.sound_timer = self.state.sound_timer.saturating_sub(1);
+                self.state.delay_timer = self.state.delay_timer.saturating_sub(1);
+                self.state.sound_timer = self.state.sound_timer.saturating_sub(1);
 
-                        for _ in 0..=instructions_per_frame {
-                            let instruction = self
-                                .fetch_instruction()
-                                .map_err(|e| std::io::Error::other(e.to_string()))?;
-                            instruction
-                                .execute(&mut self.state)
-                                .map_err(|e| std::io::Error::other(e.to_string()))?;
-                        }
-
-                        self.draw_frame(frame, frame.area(), &rom_stem);
-                        self.state.keypad.release_key();
-                        Ok(())
-                    }
+                for _ in 0..=instructions_per_frame {
+                    let instruction = self
+                        .fetch_instruction()
+                        .map_err(|e| std::io::Error::other(e.to_string()))?;
+                    instruction
+                        .execute(&mut self.state)
+                        .map_err(|e| std::io::Error::other(e.to_string()))?;
                 }
+
+                self.draw(frame, frame.area(), &rom_stem);
+                self.state.keypad.release_key();
+                Ok(())
             })?;
 
             let elapsed = frame_start.elapsed();
