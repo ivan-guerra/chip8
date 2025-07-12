@@ -140,6 +140,74 @@ impl RegisterBank {
     }
 }
 
+#[derive(PartialEq)]
+pub enum Key {
+    Key0,
+    Key1,
+    Key2,
+    Key3,
+    Key4,
+    Key5,
+    Key6,
+    Key7,
+    Key8,
+    Key9,
+    KeyA,
+    KeyB,
+    KeyC,
+    KeyD,
+    KeyE,
+    KeyF,
+}
+impl Key {
+    pub fn from_index(index: u8) -> anyhow::Result<Key> {
+        match index {
+            0 => Ok(Key::Key0),
+            1 => Ok(Key::Key1),
+            2 => Ok(Key::Key2),
+            3 => Ok(Key::Key3),
+            4 => Ok(Key::Key4),
+            5 => Ok(Key::Key5),
+            6 => Ok(Key::Key6),
+            7 => Ok(Key::Key7),
+            8 => Ok(Key::Key8),
+            9 => Ok(Key::Key9),
+            10 => Ok(Key::KeyA),
+            11 => Ok(Key::KeyB),
+            12 => Ok(Key::KeyC),
+            13 => Ok(Key::KeyD),
+            14 => Ok(Key::KeyE),
+            15 => Ok(Key::KeyF),
+            _ => Err(anyhow!("Invalid key index: {}", index)),
+        }
+    }
+}
+
+pub struct Keypad {
+    active_key: Option<Key>,
+}
+impl Keypad {
+    pub fn new() -> Self {
+        Keypad { active_key: None }
+    }
+
+    pub fn press_key(&mut self, key: Key) {
+        self.active_key = Some(key);
+    }
+
+    pub fn release_key(&mut self) {
+        self.active_key = None;
+    }
+
+    pub fn is_key_pressed(&self, key: Key) -> bool {
+        if let Some(active_key) = &self.active_key {
+            *active_key == key
+        } else {
+            false
+        }
+    }
+}
+
 pub struct Chip8State {
     pub memory: Memory,
     pub registers: RegisterBank,
@@ -149,6 +217,7 @@ pub struct Chip8State {
     pub delay_timer: Timer,
     pub sound_timer: Timer,
     pub display: BitArr!(for DISPLAY_WIDTH * DISPLAY_HEIGHT),
+    pub keypad: Keypad,
 }
 impl Default for Chip8State {
     fn default() -> Self {
@@ -161,6 +230,7 @@ impl Default for Chip8State {
             delay_timer: 0,
             sound_timer: 0,
             display: BitArray::ZERO,
+            keypad: Keypad::new(),
         }
     }
 }

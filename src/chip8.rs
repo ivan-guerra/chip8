@@ -1,5 +1,5 @@
 use crate::instruction::{decode, Instruction};
-use crate::state::{Chip8State, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
+use crate::state::{Chip8State, Key, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
 use anyhow::anyhow;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
@@ -109,6 +109,7 @@ impl Emulator {
                             .execute(&mut self.state)
                             .map_err(|e| std::io::Error::other(e.to_string()))?;
                         self.draw_frame(frame, frame.area(), &rom_stem);
+                        self.state.keypad.release_key();
                         Ok(())
                     }
                 }
@@ -126,11 +127,61 @@ impl Emulator {
                                 break 'mainloop;
                             }
                         }
-                        AppState::Running => {
-                            if key.code == KeyCode::Esc {
+                        AppState::Running => match key.code {
+                            KeyCode::Esc => {
                                 app_state = AppState::Splash;
+                                self.state.reset();
                             }
-                        }
+                            KeyCode::Char('1') => {
+                                self.state.keypad.press_key(Key::Key1);
+                            }
+                            KeyCode::Char('2') => {
+                                self.state.keypad.press_key(Key::Key2);
+                            }
+                            KeyCode::Char('3') => {
+                                self.state.keypad.press_key(Key::Key3);
+                            }
+                            KeyCode::Char('4') => {
+                                self.state.keypad.press_key(Key::KeyC);
+                            }
+                            KeyCode::Char('q') => {
+                                self.state.keypad.press_key(Key::Key4);
+                            }
+                            KeyCode::Char('w') => {
+                                self.state.keypad.press_key(Key::Key5);
+                            }
+                            KeyCode::Char('e') => {
+                                self.state.keypad.press_key(Key::Key6);
+                            }
+                            KeyCode::Char('r') => {
+                                self.state.keypad.press_key(Key::KeyD);
+                            }
+                            KeyCode::Char('a') => {
+                                self.state.keypad.press_key(Key::Key7);
+                            }
+                            KeyCode::Char('s') => {
+                                self.state.keypad.press_key(Key::Key8);
+                            }
+                            KeyCode::Char('d') => {
+                                self.state.keypad.press_key(Key::Key9);
+                            }
+                            KeyCode::Char('f') => {
+                                self.state.keypad.press_key(Key::KeyE);
+                            }
+                            KeyCode::Char('z') => {
+                                self.state.keypad.press_key(Key::KeyA);
+                            }
+                            KeyCode::Char('x') => {
+                                self.state.keypad.press_key(Key::Key0);
+                            }
+                            KeyCode::Char('c') => {
+                                self.state.keypad.press_key(Key::KeyB);
+                            }
+                            KeyCode::Char('v') => {
+                                self.state.keypad.press_key(Key::KeyF);
+                            }
+                            _ => {}
+                        },
                     }
                 }
             }

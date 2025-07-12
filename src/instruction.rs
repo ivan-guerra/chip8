@@ -1,4 +1,4 @@
-use crate::state::{Address, Chip8State, Register, FONT_ADDR, FONT_HEIGHT};
+use crate::state::{Address, Chip8State, Key, Register, FONT_ADDR, FONT_HEIGHT};
 use anyhow::anyhow;
 
 pub trait Instruction {
@@ -41,7 +41,11 @@ pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Instruction>> {
         0xB => Ok(Box::new(JumpWithOffset(decoded))),
         0xC => Ok(Box::new(Random(decoded))),
         0xD => Ok(Box::new(Display(decoded))),
-        // TODO: 0xE* missing skip if key instructions
+        0xE => match decoded.nn {
+            0x9E => Ok(Box::new(SkipIfKeyPressed(decoded))),
+            0xA1 => Ok(Box::new(SkipIfKeyNotPressed(decoded))),
+            _ => Err(anyhow!("Unsupported opcode for 0xE: {:#04X}", raw)),
+        },
         0xF => match decoded.nn {
             0x07 => Ok(Box::new(SetVxFromTimer(decoded))),
             0x15 => Ok(Box::new(SetDelayTimer(decoded))),
@@ -51,7 +55,7 @@ pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Instruction>> {
             0x33 => Ok(Box::new(BinaryCodedDecimal(decoded))),
             0x55 => Ok(Box::new(Store(decoded))),
             0x65 => Ok(Box::new(Load(decoded))),
-            // TODO: 0x0A missing get key instruction
+            0x0A => Ok(Box::new(GetKey(decoded))),
             _ => Err(anyhow!("Unsupported opcode for 0xF: {:#04X}", raw)),
         },
         _ => Err(anyhow!("Unknown opcode: {:#04X}", decoded.opcode)),
@@ -364,6 +368,36 @@ impl Instruction for Display {
     }
 }
 
+struct SkipIfKeyPressed(DecodedInstruction);
+impl Instruction for SkipIfKeyPressed {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
+        let reg_x = Register::from_index(self.0.x)?;
+        let value_x = state.registers.read(reg_x);
+        let pressed_key = Key::from_index(value_x)?;
+        let is_key_pressed = state.keypad.is_key_pressed(pressed_key);
+
+        if is_key_pressed {
+            state.pc += 2;
+        }
+        Ok(())
+    }
+}
+
+struct SkipIfKeyNotPressed(DecodedInstruction);
+impl Instruction for SkipIfKeyNotPressed {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
+        let reg_x = Register::from_index(self.0.x)?;
+        let value_x = state.registers.read(reg_x);
+        let pressed_key = Key::from_index(value_x)?;
+        let is_key_pressed = state.keypad.is_key_pressed(pressed_key);
+
+        if !is_key_pressed {
+            state.pc += 2;
+        }
+        Ok(())
+    }
+}
+
 struct SetVxFromTimer(DecodedInstruction);
 impl Instruction for SetVxFromTimer {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -449,6 +483,25 @@ impl Instruction for Load {
             let value = state.registers.read(reg);
             state.memory.write(state.index + i, value)?;
         }
+        Ok(())
+    }
+}
+
+struct GetKey(DecodedInstruction);
+impl Instruction for GetKey {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
+        let pressed_key = (0..=15).find(|i| {
+            let key = Key::from_index(*i).unwrap();
+            state.keypad.is_key_pressed(key)
+        });
+
+        if let Some(i) = pressed_key {
+            let reg_x = Register::from_index(self.0.x)?;
+            state.registers.write(reg_x, i);
+        } else {
+            state.pc -= 2; // If no key is pressed, decrement PC to repeat the instruction
+        }
+
         Ok(())
     }
 }
