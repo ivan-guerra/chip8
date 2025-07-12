@@ -74,7 +74,7 @@ impl Emulator {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(game_height), // Exact size for game area
-                Constraint::Length(6),           // Key mapping area
+                Constraint::Length(7),           // Key mapping area
                 Constraint::Min(0),              // Remaining space
             ])
             .split(area);
