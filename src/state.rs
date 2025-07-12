@@ -14,7 +14,7 @@ pub const PC_START_ADDR: Address = 0x200;
 pub const NUM_REGISTERS: usize = 16;
 pub const DISPLAY_WIDTH: usize = 64;
 pub const DISPLAY_HEIGHT: usize = 32;
-pub const DEFAULT_FRAME_RATE: f64 = 60.0;
+pub const DEFAULT_FRAME_RATE: u64 = 60;
 
 pub struct Memory {
     data: [u8; MEM_SIZE],
@@ -212,11 +212,11 @@ impl Keypad {
 }
 
 pub struct Settings {
-    pub frame_rate: f64,
+    pub frame_rate: u64,
     pub rom: PathBuf,
 }
 impl Settings {
-    pub fn new(frame_rate: f64, rom: String) -> Self {
+    pub fn new(frame_rate: u64, rom: String) -> Self {
         Settings {
             frame_rate,
             rom: rom.into(),

@@ -78,7 +78,9 @@ impl Emulator {
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
-        let frame_duration = Duration::from_secs_f64(1.0 / self.state.settings.frame_rate);
+        let frame_duration = Duration::from_secs_f64(1.0 / self.state.settings.frame_rate as f64);
+        let instructions_per_second = 700;
+        let instructions_per_frame = instructions_per_second / self.state.settings.frame_rate;
         let rom_stem: String = self
             .state
             .settings
@@ -107,12 +109,15 @@ impl Emulator {
                         self.state.delay_timer = self.state.delay_timer.saturating_sub(1);
                         self.state.sound_timer = self.state.sound_timer.saturating_sub(1);
 
-                        let instruction = self
-                            .fetch_instruction()
-                            .map_err(|e| std::io::Error::other(e.to_string()))?;
-                        instruction
-                            .execute(&mut self.state)
-                            .map_err(|e| std::io::Error::other(e.to_string()))?;
+                        for _ in 0..=instructions_per_frame {
+                            let instruction = self
+                                .fetch_instruction()
+                                .map_err(|e| std::io::Error::other(e.to_string()))?;
+                            instruction
+                                .execute(&mut self.state)
+                                .map_err(|e| std::io::Error::other(e.to_string()))?;
+                        }
+
                         self.draw_frame(frame, frame.area(), &rom_stem);
                         self.state.keypad.release_key();
                         Ok(())
@@ -120,7 +125,7 @@ impl Emulator {
                 }
             })?;
 
-            if event::poll(std::time::Duration::from_millis(16))? {
+            if event::poll(std::time::Duration::from_millis(5))? {
                 if let Event::Key(key) = event::read()? {
                     match app_state {
                         AppState::Splash => {

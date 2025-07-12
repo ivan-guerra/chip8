@@ -11,7 +11,7 @@ mod state;
 #[command(version, about, long_about = None)]
 struct Args {
     #[arg(short, long, default_value_t = DEFAULT_FRAME_RATE, help = "Frame rate in frames per second")]
-    frame_rate: f64,
+    frame_rate: u64,
 
     #[arg(short, long, help = "Path to the ROM file to run")]
     rom_path: String,
