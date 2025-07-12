@@ -32,7 +32,7 @@ pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Instruction>> {
             0x4 => Ok(Box::new(BinaryAdd(decoded))),
             0x5 => Ok(Box::new(SubtractYFromX(decoded))),
             0x6 => Ok(Box::new(RightShift(decoded))),
-            0x8 => Ok(Box::new(SubtractXFromY(decoded))),
+            0x7 => Ok(Box::new(SubtractXFromY(decoded))),
             0xE => Ok(Box::new(LeftShift(decoded))),
             _ => Err(anyhow!("Unsupported opcode for 0x8: {:#04X}", raw)),
         },
@@ -250,11 +250,10 @@ impl Instruction for BinaryAdd {
         let sum = value_x.wrapping_add(value_y);
         state.registers.write(reg_x, sum);
 
-        // Set VF to 1 if there was no overflow, 0 otherwise
         if sum < value_x {
-            state.registers.write(Register::VF, 1);
+            state.registers.write(Register::VF, 1); // No borrow
         } else {
-            state.registers.write(Register::VF, 0);
+            state.registers.write(Register::VF, 0); // Borrow occurred
         }
         Ok(())
     }
@@ -267,7 +266,8 @@ impl Instruction for SubtractYFromX {
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
         let value_y = state.registers.read(reg_y);
-        if value_x > value_y {
+
+        if value_x >= value_y {
             state.registers.write(reg_x, value_x - value_y);
             state.registers.write(Register::VF, 1); // No borrow
         } else {
@@ -285,11 +285,12 @@ impl Instruction for SubtractXFromY {
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
         let value_y = state.registers.read(reg_y);
-        if value_y > value_x {
-            state.registers.write(reg_y, value_y - value_x);
+
+        if value_y >= value_x {
+            state.registers.write(reg_x, value_y - value_x);
             state.registers.write(Register::VF, 1); // No borrow
         } else {
-            state.registers.write(reg_y, value_y.wrapping_sub(value_x));
+            state.registers.write(reg_x, value_y.wrapping_sub(value_x));
             state.registers.write(Register::VF, 0); // Borrow occurred
         }
         Ok(())
@@ -327,7 +328,7 @@ impl Instruction for LeftShift {
         }
 
         state.registers.write(reg_x, value_x << 1);
-        state.registers.write(Register::VF, value_x & 0x01); // Set VF to LSB before shift
+        state.registers.write(Register::VF, (value_x & 0x80) >> 7); // Set VF to MSB before shift
         Ok(())
     }
 }
@@ -495,9 +496,9 @@ struct Load(DecodedInstruction);
 impl Instruction for Load {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         for i in 0..=self.0.x {
+            let value = state.memory.read(state.index + i)?;
             let reg = Register::from_index(i)?;
-            let value = state.registers.read(reg);
-            state.memory.write(state.index + i, value)?;
+            state.registers.write(reg, value);
         }
 
         if state.settings.mode == ChipMode::Comsac {
