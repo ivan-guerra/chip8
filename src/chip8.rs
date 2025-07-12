@@ -1,38 +1,67 @@
 use crate::instruction::{decode, Instruction};
-use crate::state::{ChipState, MEM_SIZE};
+use crate::state::{Chip8State, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
 use anyhow::anyhow;
+use crossterm::event::{self, Event, KeyCode};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use ratatui::backend::CrosstermBackend;
+use ratatui::layout::Alignment;
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::Terminal;
 use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
 
-const DEFAULT_FPS: u64 = 60;
+const DEFAULT_FPS: f64 = 60.0;
+
+enum AppState {
+    Splash,
+    Running,
+}
 
 #[derive(Default)]
 pub struct Emulator {
-    state: ChipState,
+    state: Chip8State,
 }
 
 impl Emulator {
-    pub fn run(&mut self, rom: PathBuf) -> anyhow::Result<()> {
-        let target_fps = DEFAULT_FPS; // TODO: Make this configurable
-        let frame_duration = Duration::from_nanos(1_000_000_000 / target_fps);
-        let rom_data = std::fs::read(rom)?;
-
-        self.state.memory.load_rom(&rom_data)?;
-
-        loop {
-            let frame_start = Instant::now();
-
-            // Fetch and execute the next instruction
-            let instruction = self.fetch_instruction()?;
-            instruction.execute(&mut self.state)?;
-
-            let elapsed = frame_start.elapsed();
-            if elapsed < frame_duration {
-                std::thread::sleep(frame_duration - elapsed);
+    fn draw_frame(
+        &mut self,
+        frame: &mut ratatui::Frame,
+        area: ratatui::layout::Rect,
+        rom_name: &str,
+    ) {
+        let mut row_string = String::with_capacity(DISPLAY_WIDTH * DISPLAY_HEIGHT + DISPLAY_HEIGHT);
+        for row_idx in 0..DISPLAY_HEIGHT {
+            for col_idx in 0..DISPLAY_WIDTH {
+                let index = row_idx * DISPLAY_WIDTH + col_idx;
+                row_string.push(if self.state.display[index] {
+                    '█'
+                } else {
+                    ' '
+                });
             }
+            row_string.push('\n');
         }
+        let paragraph = Paragraph::new(row_string)
+            .block(Block::default().borders(Borders::ALL).title(rom_name))
+            .style(Style::default().fg(Color::White));
+        frame.render_widget(paragraph, area);
+    }
+
+    fn draw_splash(&self, frame: &mut ratatui::Frame) {
+        let area = frame.area();
+        let msg = "Welcome to CHIP-8\nPress Enter to start";
+        let paragraph = Paragraph::new(msg)
+            .alignment(Alignment::Center)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("CHIP-8 Emulator"),
+            )
+            .style(Style::default().fg(Color::Cyan));
+        frame.render_widget(paragraph, area);
     }
 
     fn fetch_instruction(&mut self) -> anyhow::Result<Box<dyn Instruction>> {
@@ -46,5 +75,73 @@ impl Emulator {
         self.state.pc += 2;
 
         decode((high_byte << 8) | low_byte)
+    }
+
+    pub fn run(&mut self, rom: PathBuf) -> anyhow::Result<()> {
+        let target_fps = DEFAULT_FPS; // TODO: Make this configurable
+        let frame_duration = Duration::from_secs_f64(1.0 / target_fps);
+        let rom_stem: String = rom
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "Unknown ROM".to_string());
+        let rom_data = std::fs::read(rom)?;
+
+        enable_raw_mode()?;
+        let stdout = std::io::stdout();
+        let backend = CrosstermBackend::new(stdout);
+        let mut terminal = Terminal::new(backend)?;
+        let mut app_state = AppState::Splash;
+
+        'mainloop: loop {
+            let frame_start = Instant::now();
+
+            terminal.try_draw(|frame| -> std::io::Result<()> {
+                match app_state {
+                    AppState::Splash => {
+                        self.draw_splash(frame);
+                        Ok(())
+                    }
+                    AppState::Running => {
+                        let instruction = self
+                            .fetch_instruction()
+                            .map_err(|e| std::io::Error::other(e.to_string()))?;
+                        instruction
+                            .execute(&mut self.state)
+                            .map_err(|e| std::io::Error::other(e.to_string()))?;
+                        self.draw_frame(frame, frame.area(), &rom_stem);
+                        Ok(())
+                    }
+                }
+            })?;
+
+            if event::poll(std::time::Duration::from_millis(16))? {
+                if let Event::Key(key) = event::read()? {
+                    match app_state {
+                        AppState::Splash => {
+                            if key.code == KeyCode::Enter {
+                                self.state.reset();
+                                self.state.memory.load_rom(&rom_data)?;
+                                app_state = AppState::Running;
+                            } else if key.code == KeyCode::Esc {
+                                break 'mainloop;
+                            }
+                        }
+                        AppState::Running => {
+                            if key.code == KeyCode::Esc {
+                                app_state = AppState::Splash;
+                            }
+                        }
+                    }
+                }
+            }
+
+            let elapsed = frame_start.elapsed();
+            if elapsed < frame_duration {
+                std::thread::sleep(frame_duration - elapsed);
+            }
+        }
+        disable_raw_mode()?;
+
+        Ok(())
     }
 }

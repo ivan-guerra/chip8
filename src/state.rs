@@ -1,5 +1,5 @@
-use crate::display::{Display, TerminalDisplay};
 use anyhow::anyhow;
+use bitvec::{array::BitArray, BitArr};
 
 pub type Timer = u8;
 pub type Address = usize;
@@ -7,11 +7,11 @@ pub type CallStack = Vec<Address>;
 
 pub const MEM_SIZE: usize = 4096;
 pub const FONT_ADDR: Address = 0x50;
-pub const FONT_WIDTH: usize = 4;
 pub const FONT_HEIGHT: usize = 5;
 pub const PC_START_ADDR: Address = 0x200;
-pub const NUM_KEYS: usize = 16;
 pub const NUM_REGISTERS: usize = 16;
+pub const DISPLAY_WIDTH: usize = 64;
+pub const DISPLAY_HEIGHT: usize = 32;
 
 pub struct Memory {
     data: [u8; MEM_SIZE],
@@ -140,7 +140,7 @@ impl RegisterBank {
     }
 }
 
-pub struct ChipState {
+pub struct Chip8State {
     pub memory: Memory,
     pub registers: RegisterBank,
     pub pc: Address,
@@ -148,12 +148,11 @@ pub struct ChipState {
     pub stack: CallStack,
     pub delay_timer: Timer,
     pub sound_timer: Timer,
-    pub keypad: [bool; NUM_KEYS],
-    pub display: Box<dyn Display>,
+    pub display: BitArr!(for DISPLAY_WIDTH * DISPLAY_HEIGHT),
 }
-impl Default for ChipState {
+impl Default for Chip8State {
     fn default() -> Self {
-        ChipState {
+        Chip8State {
             memory: Memory::new(),
             registers: RegisterBank::new(),
             pc: PC_START_ADDR,
@@ -161,8 +160,51 @@ impl Default for ChipState {
             stack: Vec::new(),
             delay_timer: 0,
             sound_timer: 0,
-            keypad: [false; NUM_KEYS],
-            display: Box::new(TerminalDisplay::new()), // TODO: Make this configurable
+            display: BitArray::ZERO,
         }
+    }
+}
+impl Chip8State {
+    pub fn reset(&mut self) {
+        self.memory = Memory::new();
+        self.registers = RegisterBank::new();
+        self.pc = PC_START_ADDR;
+        self.index = 0;
+        self.stack.clear();
+        self.delay_timer = 0;
+        self.sound_timer = 0;
+        self.display.fill(false);
+    }
+
+    pub fn clear_display(&mut self) {
+        self.display.fill(false);
+    }
+
+    pub fn draw_sprite(&mut self, x: usize, y: usize, sprite_idx: u8) -> anyhow::Result<bool> {
+        let mut collision = false;
+        let sprite = self.memory.read_sprite(self.index, sprite_idx)?;
+
+        for (row, &byte) in sprite.iter().enumerate() {
+            for bit in 0..8 {
+                let pixel_x = x + bit;
+                let pixel_y = y + row;
+
+                // Skip pixels that are outside screen boundaries
+                if pixel_x >= DISPLAY_WIDTH || pixel_y >= DISPLAY_HEIGHT {
+                    continue;
+                }
+
+                let index = pixel_y * DISPLAY_WIDTH + pixel_x;
+                let current_pixel = self.display[index];
+
+                let new_pixel = (byte >> (7 - bit)) & 1 == 1;
+                if current_pixel && new_pixel {
+                    collision = true; // Collision detected
+                }
+
+                self.display.set(index, current_pixel ^ new_pixel);
+            }
+        }
+        Ok(collision)
     }
 }

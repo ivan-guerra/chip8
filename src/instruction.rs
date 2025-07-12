@@ -1,8 +1,8 @@
-use crate::state::{Address, ChipState, Register, FONT_ADDR, FONT_HEIGHT};
+use crate::state::{Address, Chip8State, Register, FONT_ADDR, FONT_HEIGHT};
 use anyhow::anyhow;
 
 pub trait Instruction {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()>;
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()>;
 }
 
 pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Instruction>> {
@@ -87,15 +87,15 @@ impl DecodedInstruction {
 
 struct ClearScreen;
 impl Instruction for ClearScreen {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
-        state.display.clear();
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
+        state.clear_display();
         Ok(())
     }
 }
 
 struct Jump(DecodedInstruction);
 impl Instruction for Jump {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         state.pc = self.0.nnn;
         Ok(())
     }
@@ -103,7 +103,7 @@ impl Instruction for Jump {
 
 struct SubroutineCall(DecodedInstruction);
 impl Instruction for SubroutineCall {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         state.stack.push(state.pc);
         state.pc = self.0.nnn;
         Ok(())
@@ -112,7 +112,7 @@ impl Instruction for SubroutineCall {
 
 struct SubroutineReturn;
 impl Instruction for SubroutineReturn {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         if let Some(return_address) = state.stack.pop() {
             state.pc = return_address;
             Ok(())
@@ -124,7 +124,7 @@ impl Instruction for SubroutineReturn {
 
 struct JumpEqX(DecodedInstruction);
 impl Instruction for JumpEqX {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         if state.registers.read(reg_x) == self.0.nn {
             state.pc += 2;
@@ -135,7 +135,7 @@ impl Instruction for JumpEqX {
 
 struct JumpNeqX(DecodedInstruction);
 impl Instruction for JumpNeqX {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         if state.registers.read(reg_x) != self.0.nn {
             state.pc += 2;
@@ -146,7 +146,7 @@ impl Instruction for JumpNeqX {
 
 struct JumpXEqY(DecodedInstruction);
 impl Instruction for JumpXEqY {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         if state.registers.read(reg_x) == state.registers.read(reg_y) {
@@ -158,7 +158,7 @@ impl Instruction for JumpXEqY {
 
 struct JumpXNeqY(DecodedInstruction);
 impl Instruction for JumpXNeqY {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         if state.registers.read(reg_x) != state.registers.read(reg_y) {
@@ -170,7 +170,7 @@ impl Instruction for JumpXNeqY {
 
 struct SetImmediate(DecodedInstruction);
 impl Instruction for SetImmediate {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         state.registers.write(reg_x, self.0.nn);
         Ok(())
@@ -179,7 +179,7 @@ impl Instruction for SetImmediate {
 
 struct Add(DecodedInstruction);
 impl Instruction for Add {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_x_val = state.registers.read(reg_x);
         state
@@ -191,7 +191,7 @@ impl Instruction for Add {
 
 struct SetXToY(DecodedInstruction);
 impl Instruction for SetXToY {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         let value_y = state.registers.read(reg_y);
@@ -202,7 +202,7 @@ impl Instruction for SetXToY {
 
 struct BinaryOr(DecodedInstruction);
 impl Instruction for BinaryOr {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
@@ -214,7 +214,7 @@ impl Instruction for BinaryOr {
 
 struct BinaryAnd(DecodedInstruction);
 impl Instruction for BinaryAnd {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
@@ -226,7 +226,7 @@ impl Instruction for BinaryAnd {
 
 struct LogicalXor(DecodedInstruction);
 impl Instruction for LogicalXor {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
@@ -238,7 +238,7 @@ impl Instruction for LogicalXor {
 
 struct BinaryAdd(DecodedInstruction);
 impl Instruction for BinaryAdd {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
@@ -258,7 +258,7 @@ impl Instruction for BinaryAdd {
 
 struct SubtractYFromX(DecodedInstruction);
 impl Instruction for SubtractYFromX {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
@@ -276,7 +276,7 @@ impl Instruction for SubtractYFromX {
 
 struct SubtractXFromY(DecodedInstruction);
 impl Instruction for SubtractXFromY {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
         let value_x = state.registers.read(reg_x);
@@ -294,7 +294,7 @@ impl Instruction for SubtractXFromY {
 
 struct RightShift(DecodedInstruction);
 impl Instruction for RightShift {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         // TODO: Make this configurable.
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
@@ -308,7 +308,7 @@ impl Instruction for RightShift {
 
 struct LeftShift(DecodedInstruction);
 impl Instruction for LeftShift {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         // TODO: Make this configurable.
         let reg_x = Register::from_index(self.0.x)?;
         let reg_y = Register::from_index(self.0.y)?;
@@ -322,7 +322,7 @@ impl Instruction for LeftShift {
 
 struct SetIndex(DecodedInstruction);
 impl Instruction for SetIndex {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         state.index = self.0.nnn;
         Ok(())
     }
@@ -330,7 +330,7 @@ impl Instruction for SetIndex {
 
 struct JumpWithOffset(DecodedInstruction);
 impl Instruction for JumpWithOffset {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         state.pc = usize::from(state.registers.read(Register::V0)) + self.0.nnn;
         // TODO: Make this configurable. The code below is how the CHIP-48 and SUPER-CHIP behave.
         //let reg_x = Register::from_index(self.0.x)?;
@@ -341,7 +341,7 @@ impl Instruction for JumpWithOffset {
 
 struct Random(DecodedInstruction);
 impl Instruction for Random {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let random_value = rand::random::<u8>() & self.0.nn;
         state.registers.write(reg_x, random_value);
@@ -351,15 +351,11 @@ impl Instruction for Random {
 
 struct Display(DecodedInstruction);
 impl Instruction for Display {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let x = state.registers.read(Register::from_index(self.0.x)?);
         let y = state.registers.read(Register::from_index(self.0.y)?);
-        let sprite = state.memory.read_sprite(state.index, self.0.n)?;
 
-        if state
-            .display
-            .draw_sprite(usize::from(x), usize::from(y), sprite)
-        {
+        if state.draw_sprite(usize::from(x), usize::from(y), self.0.n)? {
             state.registers.write(Register::VF, 1);
         } else {
             state.registers.write(Register::VF, 0);
@@ -370,7 +366,7 @@ impl Instruction for Display {
 
 struct SetVxFromTimer(DecodedInstruction);
 impl Instruction for SetVxFromTimer {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         state.registers.write(reg_x, state.delay_timer);
         Ok(())
@@ -379,7 +375,7 @@ impl Instruction for SetVxFromTimer {
 
 struct SetDelayTimer(DecodedInstruction);
 impl Instruction for SetDelayTimer {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         state.delay_timer = state.registers.read(reg_x);
         Ok(())
@@ -388,7 +384,7 @@ impl Instruction for SetDelayTimer {
 
 struct SetSoundTimer(DecodedInstruction);
 impl Instruction for SetSoundTimer {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         state.sound_timer = state.registers.read(reg_x);
         Ok(())
@@ -397,7 +393,7 @@ impl Instruction for SetSoundTimer {
 
 struct AddToIndex(DecodedInstruction);
 impl Instruction for AddToIndex {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let value_x = state.registers.read(reg_x);
         state.index = state.index.wrapping_add(usize::from(value_x));
@@ -407,7 +403,7 @@ impl Instruction for AddToIndex {
 
 struct FontChar(DecodedInstruction);
 impl Instruction for FontChar {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let value_x = state.registers.read(reg_x);
         state.index = usize::from(value_x & 0x0F) * FONT_HEIGHT + FONT_ADDR;
@@ -417,7 +413,7 @@ impl Instruction for FontChar {
 
 struct BinaryCodedDecimal(DecodedInstruction);
 impl Instruction for BinaryCodedDecimal {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let reg_x = Register::from_index(self.0.x)?;
         let value_x = state.registers.read(reg_x);
         let bcd = [(value_x / 100) % 10, (value_x / 10) % 10, value_x % 10];
@@ -431,7 +427,7 @@ impl Instruction for BinaryCodedDecimal {
 struct Store(DecodedInstruction);
 impl Instruction for Store {
     // TODO: Make this configurable so that in the alternative mode it updates index.
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         let index_rng = state.index..=state.index + self.0.x;
         let reg_rng = 0..=self.0.x;
 
@@ -446,7 +442,7 @@ impl Instruction for Store {
 
 struct Load(DecodedInstruction);
 impl Instruction for Load {
-    fn execute(&self, state: &mut ChipState) -> anyhow::Result<()> {
+    fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
         // TODO: Make this configurable so that in the alternative mode it updates index.
         for i in 0..=self.0.x {
             let reg = Register::from_index(i)?;
