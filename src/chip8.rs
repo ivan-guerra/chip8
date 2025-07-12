@@ -1,13 +1,13 @@
-use crate::instruction::{Instruction, decode};
-use crate::state::{Chip8State, DISPLAY_HEIGHT, DISPLAY_WIDTH, Key, MEM_SIZE, Settings};
+use crate::instruction::{decode, Instruction};
+use crate::state::{Chip8State, Key, Settings, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
 use anyhow::anyhow;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Alignment;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::Terminal;
 use std::time::{Duration, Instant};
 
 enum AppState {
@@ -98,33 +98,7 @@ impl Emulator {
         'mainloop: loop {
             let frame_start = Instant::now();
 
-            terminal.try_draw(|frame| -> std::io::Result<()> {
-                match app_state {
-                    AppState::Splash => {
-                        self.draw_splash(frame);
-                        Ok(())
-                    }
-                    AppState::Running => {
-                        self.state.delay_timer = self.state.delay_timer.saturating_sub(1);
-                        self.state.sound_timer = self.state.sound_timer.saturating_sub(1);
-
-                        for _ in 0..=instructions_per_frame {
-                            let instruction = self
-                                .fetch_instruction()
-                                .map_err(|e| std::io::Error::other(e.to_string()))?;
-                            instruction
-                                .execute(&mut self.state)
-                                .map_err(|e| std::io::Error::other(e.to_string()))?;
-                        }
-
-                        self.draw_frame(frame, frame.area(), &rom_stem);
-                        self.state.keypad.release_key();
-                        Ok(())
-                    }
-                }
-            })?;
-
-            if event::poll(std::time::Duration::from_millis(5))? {
+            if event::poll(std::time::Duration::ZERO)? {
                 if let Event::Key(key) = event::read()? {
                     match app_state {
                         AppState::Splash => {
@@ -195,6 +169,32 @@ impl Emulator {
                     }
                 }
             }
+
+            terminal.try_draw(|frame| -> std::io::Result<()> {
+                match app_state {
+                    AppState::Splash => {
+                        self.draw_splash(frame);
+                        Ok(())
+                    }
+                    AppState::Running => {
+                        self.state.delay_timer = self.state.delay_timer.saturating_sub(1);
+                        self.state.sound_timer = self.state.sound_timer.saturating_sub(1);
+
+                        for _ in 0..=instructions_per_frame {
+                            let instruction = self
+                                .fetch_instruction()
+                                .map_err(|e| std::io::Error::other(e.to_string()))?;
+                            instruction
+                                .execute(&mut self.state)
+                                .map_err(|e| std::io::Error::other(e.to_string()))?;
+                        }
+
+                        self.draw_frame(frame, frame.area(), &rom_stem);
+                        self.state.keypad.release_key();
+                        Ok(())
+                    }
+                }
+            })?;
 
             let elapsed = frame_start.elapsed();
             if elapsed < frame_duration {
