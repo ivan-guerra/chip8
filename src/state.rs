@@ -1,9 +1,10 @@
-use anyhow::anyhow;
-use bitvec::{array::BitArray, BitArr};
-use rdev::{listen, EventType, Key as RdevKey};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+
+use anyhow::anyhow;
+use bitvec::{array::BitArray, BitArr};
+use rdev::{listen, EventType, Key as RdevKey};
 
 pub type Timer = u8;
 pub type Address = usize;

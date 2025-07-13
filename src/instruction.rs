@@ -1,7 +1,8 @@
+use anyhow::anyhow;
+
 use crate::state::{
     Address, Chip8State, Key, Register, DISPLAY_HEIGHT, DISPLAY_WIDTH, FONT_ADDR, FONT_HEIGHT,
 };
-use anyhow::anyhow;
 
 pub trait Instruction {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()>;

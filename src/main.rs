@@ -1,7 +1,6 @@
 use crate::chip8::Emulator;
-use crate::state::{DEFAULT_FRAME_RATE, Settings};
+use crate::state::{Settings, DEFAULT_FRAME_RATE, DEFAULT_INSTRUCTIONS_PER_SECOND};
 use clap::Parser;
-use state::DEFAULT_INSTRUCTIONS_PER_SECOND;
 
 mod chip8;
 mod instruction;

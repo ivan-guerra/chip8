@@ -1,17 +1,22 @@
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use anyhow::anyhow;
+use crossterm::{
+    event,
+    terminal::{disable_raw_mode, enable_raw_mode},
+};
+use ratatui::{
+    backend::CrosstermBackend,
+    layout::Alignment,
+    style::{Color, Style},
+    widgets::{Block, Borders, Paragraph},
+    Terminal,
+};
+use rodio::{source::SineWave, OutputStream, OutputStreamHandle, Sink};
+
 use crate::instruction::{decode, Instruction};
 use crate::state::{Chip8State, Settings, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
-use anyhow::anyhow;
-use crossterm::event;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-use ratatui::backend::CrosstermBackend;
-use ratatui::layout::Alignment;
-use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Borders, Paragraph};
-use ratatui::Terminal;
-use rodio::{source::SineWave, OutputStream, OutputStreamHandle, Sink};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use std::time::Instant;
 
 /// A simple toggleable beep (square wave) for CHIP-8
 pub struct Beep {
