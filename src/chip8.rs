@@ -1,7 +1,7 @@
 use crate::instruction::{decode, Instruction};
-use crate::state::{Chip8State, Key, Settings, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
+use crate::state::{Chip8State, Settings, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
 use anyhow::anyhow;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Alignment;
@@ -167,67 +167,14 @@ impl Emulator {
         'mainloop: loop {
             let frame_start = Instant::now();
 
-            if event::poll(std::time::Duration::ZERO)? {
-                if let Event::Key(key_event) = event::read()? {
-                    match (key_event.code, key_event.kind) {
-                        (KeyCode::Esc, _) => {
-                            terminal.clear()?;
-                            break 'mainloop;
-                        }
-                        (_, KeyEventKind::Release) => {
-                            self.state.keypad.release_key();
-                        }
-                        (KeyCode::Char('1'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key1);
-                        }
-                        (KeyCode::Char('2'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key2);
-                        }
-                        (KeyCode::Char('3'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key3);
-                        }
-                        (KeyCode::Char('4'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::KeyC);
-                        }
-                        (KeyCode::Char('q'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key4);
-                        }
-                        (KeyCode::Char('w'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key5);
-                        }
-                        (KeyCode::Char('e'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key6);
-                        }
-                        (KeyCode::Char('r'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::KeyD);
-                        }
-                        (KeyCode::Char('a'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key7);
-                        }
-                        (KeyCode::Char('s'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key8);
-                        }
-                        (KeyCode::Char('d'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key9);
-                        }
-                        (KeyCode::Char('f'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::KeyE);
-                        }
-                        (KeyCode::Char('z'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::KeyA);
-                        }
-                        (KeyCode::Char('x'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::Key0);
-                        }
-                        (KeyCode::Char('c'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::KeyB);
-                        }
-                        (KeyCode::Char('v'), KeyEventKind::Press) => {
-                            self.state.keypad.press_key(Key::KeyF);
-                        }
-                        _ => {}
-                    }
-                }
+            if self.state.keypad.is_escape_pressed() {
+                terminal.clear()?;
+                break 'mainloop;
+            }
+
+            // Consume and discard any crossterm events to prevent echoing
+            while event::poll(Duration::ZERO)? {
+                let _ = event::read()?;
             }
 
             terminal.try_draw(|frame| -> std::io::Result<()> {

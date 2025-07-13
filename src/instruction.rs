@@ -509,6 +509,10 @@ impl Instruction for GetKey {
         if let Some(i) = pressed_key {
             let reg_x = Register::from_index(self.0.x)?;
             state.registers.write(reg_x, i);
+
+            // Need to manually mark key as released as Chip-8 expects the key to be released after
+            // reading
+            state.keypad.release_key(Key::from_index(i)?);
         } else {
             state.pc -= 2; // If no key is pressed, decrement PC to repeat the instruction
         }

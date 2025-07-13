@@ -13,3 +13,4 @@ ratatui = "0.29.0"
 crossterm = "0.29.0"
 clap = {version = "4.5.41", features = ["derive"]}
 rodio = "0.17.3"
+rdev = "0.5.3"

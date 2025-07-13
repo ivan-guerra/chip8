@@ -1,7 +1,9 @@
-use std::path::PathBuf;
-
 use anyhow::anyhow;
 use bitvec::{array::BitArray, BitArr};
+use rdev::{listen, EventType, Key as RdevKey};
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 pub type Timer = u8;
 pub type Address = usize;
@@ -144,7 +146,7 @@ impl RegisterBank {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq, Hash)]
 pub enum Key {
     Key0,
     Key1,
@@ -185,30 +187,87 @@ impl Key {
             _ => Err(anyhow!("Invalid key index: {}", index)),
         }
     }
+
+    pub fn from_rdev(key: rdev::Key) -> Option<Key> {
+        match key {
+            RdevKey::Num1 => Some(Key::Key1),
+            RdevKey::Num2 => Some(Key::Key2),
+            RdevKey::Num3 => Some(Key::Key3),
+            RdevKey::Num4 => Some(Key::KeyC),
+            RdevKey::KeyQ => Some(Key::Key4),
+            RdevKey::KeyW => Some(Key::Key5),
+            RdevKey::KeyE => Some(Key::Key6),
+            RdevKey::KeyR => Some(Key::KeyD),
+            RdevKey::KeyA => Some(Key::Key7),
+            RdevKey::KeyS => Some(Key::Key8),
+            RdevKey::KeyD => Some(Key::Key9),
+            RdevKey::KeyF => Some(Key::KeyE),
+            RdevKey::KeyZ => Some(Key::KeyA),
+            RdevKey::KeyX => Some(Key::Key0),
+            RdevKey::KeyC => Some(Key::KeyB),
+            RdevKey::KeyV => Some(Key::KeyF),
+            _ => None,
+        }
+    }
 }
 
 pub struct Keypad {
-    active_key: Option<Key>,
+    pressed_keys: Arc<Mutex<HashSet<Key>>>,
+    escape_pressed: Arc<Mutex<bool>>,
 }
+
 impl Keypad {
     pub fn new() -> Self {
-        Keypad { active_key: None }
-    }
+        let pressed_keys = Arc::new(Mutex::new(HashSet::new()));
+        let escape_pressed = Arc::new(Mutex::new(false));
+        let pressed_keys_clone = pressed_keys.clone();
+        let escape_pressed_clone = escape_pressed.clone();
 
-    pub fn press_key(&mut self, key: Key) {
-        self.active_key = Some(key);
-    }
+        // Spawn a background thread to listen for key events
+        std::thread::spawn(move || {
+            if let Err(error) = listen(move |event| {
+                let mut keys = pressed_keys_clone.lock().unwrap();
+                let mut escape = escape_pressed_clone.lock().unwrap();
 
-    pub fn release_key(&mut self) {
-        self.active_key = None;
+                match event.event_type {
+                    EventType::KeyPress(key) => {
+                        if key == RdevKey::Escape {
+                            *escape = true;
+                        } else if let Some(chip8_key) = Key::from_rdev(key) {
+                            keys.insert(chip8_key);
+                        }
+                    }
+                    EventType::KeyRelease(key) => {
+                        if key == RdevKey::Escape {
+                            *escape = false;
+                        } else if let Some(chip8_key) = Key::from_rdev(key) {
+                            keys.remove(&chip8_key);
+                        }
+                    }
+                    _ => {}
+                }
+            }) {
+                eprintln!("Error listening for key events: {:?}", error);
+            }
+        });
+
+        Keypad {
+            pressed_keys,
+            escape_pressed,
+        }
     }
 
     pub fn is_key_pressed(&self, key: Key) -> bool {
-        if let Some(active_key) = &self.active_key {
-            *active_key == key
-        } else {
-            false
-        }
+        self.pressed_keys.lock().unwrap().contains(&key)
+    }
+
+    pub fn release_key(&self, key: Key) {
+        let mut keys = self.pressed_keys.lock().unwrap();
+        keys.remove(&key);
+    }
+
+    pub fn is_escape_pressed(&self) -> bool {
+        *self.escape_pressed.lock().unwrap()
     }
 }
 
