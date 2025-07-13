@@ -1,13 +1,41 @@
+//! CHIP-8 Instruction Set Implementation
+//!
+//! This module provides a complete implementation of the CHIP-8 instruction set,
+//! including instruction decoding and execution. The CHIP-8 virtual machine has
+//! 35 different instructions that cover arithmetic, logic, memory operations,
+//! control flow, graphics, and input handling.
+
 use anyhow::anyhow;
 
 use crate::state::{
     Address, Chip8State, Key, Register, DISPLAY_HEIGHT, DISPLAY_WIDTH, FONT_ADDR, FONT_HEIGHT,
 };
 
+/// Trait defining the execution interface for CHIP-8 instructions.
+///
+/// All CHIP-8 instructions implement this trait to provide a uniform interface
+/// for instruction execution. Instructions operate on mutable state and can
+/// return errors if execution fails (e.g., invalid memory access, stack overflow).
 pub trait Instruction {
+    /// Executes the instruction, possibly modifying the provided CHIP-8 state.
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()>;
 }
 
+/// Decodes a raw 16-bit instruction word into an executable instruction object.
+///
+/// This function implements the complete CHIP-8 instruction decoder, parsing
+/// the opcode and creating the appropriate instruction implementation. The CHIP-8
+/// instruction set uses a variable-length opcode format where the first nibble
+/// determines the instruction family, and additional nibbles may further specify
+/// the exact operation.
+///
+/// # Instruction Format
+/// CHIP-8 instructions are 16-bit words with the following general structure:
+/// ```text
+/// OPCODE XY N    (where each character represents a 4-bit nibble)
+/// OPCODE X NN    (8-bit immediate value)
+/// OPCODE NNN     (12-bit address)
+/// ```
 pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Instruction>> {
     let decoded = DecodedInstruction::new(raw);
 
@@ -65,6 +93,10 @@ pub fn decode(raw: u16) -> anyhow::Result<Box<dyn Instruction>> {
     }
 }
 
+/// Internal structure for holding parsed components of a CHIP-8 instruction.
+///
+/// This structure breaks down a 16-bit instruction word into its constituent
+/// parts for easier access during instruction execution.
 struct DecodedInstruction {
     /// First nibble. Represents the operation code.
     opcode: u8,
@@ -79,7 +111,13 @@ struct DecodedInstruction {
     /// The second, third, and fourth nibbles. A 12-bit immediate address.
     nnn: Address,
 }
+
 impl DecodedInstruction {
+    /// Creates a new DecodedInstruction by parsing a raw 16-bit instruction word.
+    ///
+    /// This function extracts all possible instruction components using bit
+    /// manipulation, regardless of which components the specific instruction
+    /// actually uses.
     fn new(raw: u16) -> Self {
         DecodedInstruction {
             opcode: (raw >> 12) as u8,
@@ -92,6 +130,10 @@ impl DecodedInstruction {
     }
 }
 
+/// Clears the entire display screen.
+///
+/// Implements the CHIP-8 instruction `00E0` which sets all pixels on the
+/// 64×32 display to off (black).
 struct ClearScreen;
 impl Instruction for ClearScreen {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -100,6 +142,10 @@ impl Instruction for ClearScreen {
     }
 }
 
+/// Unconditional jump to a specific memory address.
+///
+/// Implements the CHIP-8 instruction `1NNN` which sets the program counter
+/// to the address NNN. This causes execution to continue from that location.
 struct Jump(DecodedInstruction);
 impl Instruction for Jump {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -108,6 +154,14 @@ impl Instruction for Jump {
     }
 }
 
+/// Calls a subroutine at the specified address.
+///
+/// Implements the CHIP-8 instruction `2NNN` which:
+/// 1. Pushes the current program counter onto the call stack
+/// 2. Sets the program counter to address NNN
+///
+/// This allows for nested subroutine calls with proper return handling.
+/// The call stack stores return addresses for when the subroutine returns.
 struct SubroutineCall(DecodedInstruction);
 impl Instruction for SubroutineCall {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -117,6 +171,15 @@ impl Instruction for SubroutineCall {
     }
 }
 
+/// Returns from a subroutine call.
+///
+/// Implements the CHIP-8 instruction `00EE` which:
+/// 1. Pops the top address from the call stack
+/// 2. Sets the program counter to that address
+///
+/// This returns execution to the instruction immediately following
+/// the most recent subroutine call. If the stack is empty, an error
+/// is returned indicating stack underflow.
 struct SubroutineReturn;
 impl Instruction for SubroutineReturn {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -129,6 +192,12 @@ impl Instruction for SubroutineReturn {
     }
 }
 
+/// Conditional skip if register Vx equals immediate value.
+///
+/// Implements the CHIP-8 instruction `3XNN` which compares the value
+/// in register Vx with the immediate value NN. If they are equal,
+/// the next instruction is skipped by advancing the program counter
+/// by 2 additional bytes.
 struct JumpEqX(DecodedInstruction);
 impl Instruction for JumpEqX {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -140,6 +209,12 @@ impl Instruction for JumpEqX {
     }
 }
 
+/// Conditional skip if register Vx does not equal immediate value.
+///
+/// Implements the CHIP-8 instruction `4XNN` which compares the value
+/// in register Vx with the immediate value NN. If they are not equal,
+/// the next instruction is skipped by advancing the program counter
+/// by 2 additional bytes.
 struct JumpNeqX(DecodedInstruction);
 impl Instruction for JumpNeqX {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -151,6 +226,11 @@ impl Instruction for JumpNeqX {
     }
 }
 
+/// Conditional skip if register Vx equals register Vy.
+///
+/// Implements the CHIP-8 instruction `5XY0` which compares the values
+/// in registers Vx and Vy. If they are equal, the next instruction
+/// is skipped by advancing the program counter by 2 additional bytes.
 struct JumpXEqY(DecodedInstruction);
 impl Instruction for JumpXEqY {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -163,6 +243,11 @@ impl Instruction for JumpXEqY {
     }
 }
 
+/// Conditional skip if register Vx does not equal register Vy.
+///
+/// Implements the CHIP-8 instruction `9XY0` which compares the values
+/// in registers Vx and Vy. If they are not equal, the next instruction
+/// is skipped by advancing the program counter by 2 additional bytes.
 struct JumpXNeqY(DecodedInstruction);
 impl Instruction for JumpXNeqY {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -175,6 +260,11 @@ impl Instruction for JumpXNeqY {
     }
 }
 
+/// Sets register Vx to an immediate 8-bit value.
+///
+/// Implements the CHIP-8 instruction `6XNN` which loads the immediate
+/// value NN into register Vx. This is the primary way to initialize
+/// registers with constant values.
 struct SetImmediate(DecodedInstruction);
 impl Instruction for SetImmediate {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -184,6 +274,12 @@ impl Instruction for SetImmediate {
     }
 }
 
+/// Adds an immediate 8-bit value to register Vx.
+///
+/// Implements the CHIP-8 instruction `7XNN` which adds the immediate
+/// value NN to the current value in register Vx. The addition uses
+/// wrapping arithmetic (overflow wraps around to 0). Unlike `BinaryAdd`,
+/// this instruction does not set the carry flag (VF).
 struct Add(DecodedInstruction);
 impl Instruction for Add {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -196,6 +292,10 @@ impl Instruction for Add {
     }
 }
 
+/// Copies the value from register Vy to register Vx.
+///
+/// Implements the CHIP-8 instruction `8XY0` which sets register Vx
+/// to the same value as register Vy. The value in Vy remains unchanged.
 struct SetXToY(DecodedInstruction);
 impl Instruction for SetXToY {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -207,6 +307,11 @@ impl Instruction for SetXToY {
     }
 }
 
+/// Performs bitwise OR operation between registers Vx and Vy.
+///
+/// Implements the CHIP-8 instruction `8XY1` which performs a bitwise OR
+/// operation on the values in registers Vx and Vy, storing the result
+/// in Vx. As a side effect, register VF is always set to 0.
 struct BinaryOr(DecodedInstruction);
 impl Instruction for BinaryOr {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -221,6 +326,11 @@ impl Instruction for BinaryOr {
     }
 }
 
+/// Performs bitwise AND operation between registers Vx and Vy.
+///
+/// Implements the CHIP-8 instruction `8XY2` which performs a bitwise AND
+/// operation on the values in registers Vx and Vy, storing the result
+/// in Vx. As a side effect, register VF is always set to 0.
 struct BinaryAnd(DecodedInstruction);
 impl Instruction for BinaryAnd {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -235,6 +345,11 @@ impl Instruction for BinaryAnd {
     }
 }
 
+/// Performs bitwise XOR operation between registers Vx and Vy.
+///
+/// Implements the CHIP-8 instruction `8XY3` which performs a bitwise XOR
+/// (exclusive OR) operation on the values in registers Vx and Vy, storing
+/// the result in Vx. As a side effect, register VF is always set to 0.
 struct LogicalXor(DecodedInstruction);
 impl Instruction for LogicalXor {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -249,6 +364,13 @@ impl Instruction for LogicalXor {
     }
 }
 
+/// Adds register Vy to register Vx with carry detection.
+///
+/// Implements the CHIP-8 instruction `8XY4` which adds the value in register
+/// Vy to register Vx, storing the result in Vx. If the addition results in
+/// a value greater than 255 (8-bit overflow), register VF is set to 1 to
+/// indicate carry; otherwise VF is set to 0. The actual addition uses
+/// wrapping arithmetic.
 struct BinaryAdd(DecodedInstruction);
 impl Instruction for BinaryAdd {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -268,6 +390,12 @@ impl Instruction for BinaryAdd {
     }
 }
 
+/// Subtracts register Vy from register Vx with borrow detection.
+///
+/// Implements the CHIP-8 instruction `8XY5` which subtracts the value in register
+/// Vy from register Vx, storing the result in Vx. If Vx >= Vy (no borrow needed),
+/// register VF is set to 1; otherwise VF is set to 0 to indicate a borrow occurred.
+/// The actual subtraction uses wrapping arithmetic when borrow occurs.
 struct SubtractYFromX(DecodedInstruction);
 impl Instruction for SubtractYFromX {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -287,6 +415,12 @@ impl Instruction for SubtractYFromX {
     }
 }
 
+/// Subtracts register Vx from register Vy with borrow detection.
+///
+/// Implements the CHIP-8 instruction `8XY7` which subtracts the value in register
+/// Vx from register Vy, storing the result in Vx. If Vy >= Vx (no borrow needed),
+/// register VF is set to 1; otherwise VF is set to 0 to indicate a borrow occurred.
+/// The actual subtraction uses wrapping arithmetic when borrow occurs.
 struct SubtractXFromY(DecodedInstruction);
 impl Instruction for SubtractXFromY {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -306,6 +440,12 @@ impl Instruction for SubtractXFromY {
     }
 }
 
+/// Performs a right shift operation on register Vy, storing result in Vx.
+///
+/// Implements the CHIP-8 instruction `8XY6` which shifts the value in register
+/// Vy one bit to the right and stores the result in register Vx. The least
+/// significant bit (LSB) of the original value is stored in register VF before
+/// the shift operation.
 struct RightShift(DecodedInstruction);
 impl Instruction for RightShift {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -320,6 +460,12 @@ impl Instruction for RightShift {
     }
 }
 
+/// Performs a left shift operation on register Vy, storing result in Vx.
+///
+/// Implements the CHIP-8 instruction `8XYE` which shifts the value in register
+/// Vy one bit to the left and stores the result in register Vx. The most
+/// significant bit (MSB) of the original value is stored in register VF before
+/// the shift operation.
 struct LeftShift(DecodedInstruction);
 impl Instruction for LeftShift {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -334,6 +480,11 @@ impl Instruction for LeftShift {
     }
 }
 
+/// Sets the index register to a specific memory address.
+///
+/// Implements the CHIP-8 instruction `ANNN` which loads the immediate
+/// value NNN into the index register. The index register is used by
+/// various instructions for memory addressing operations.
 struct SetIndex(DecodedInstruction);
 impl Instruction for SetIndex {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -342,6 +493,11 @@ impl Instruction for SetIndex {
     }
 }
 
+/// Jumps to address NNN plus the value in register V0.
+///
+/// Implements the CHIP-8 instruction `BNNN` which sets the program counter
+/// to the address NNN plus the value stored in register V0. This allows
+/// for computed jumps based on runtime values.
 struct JumpWithOffset(DecodedInstruction);
 impl Instruction for JumpWithOffset {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -350,6 +506,11 @@ impl Instruction for JumpWithOffset {
     }
 }
 
+/// Generates a random number and applies a bitmask.
+///
+/// Implements the CHIP-8 instruction `CXNN` which generates a random 8-bit
+/// number, performs a bitwise AND operation with the immediate value NN,
+/// and stores the result in register Vx.
 struct Random(DecodedInstruction);
 impl Instruction for Random {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -360,6 +521,16 @@ impl Instruction for Random {
     }
 }
 
+/// Draws a sprite to the display with collision detection.
+///
+/// Implements the CHIP-8 instruction `DXYN` which draws an N-byte sprite
+/// starting at memory location I at coordinates (Vx, Vy) on the display.
+/// Each sprite is 8 pixels wide and N pixels tall. Pixels are XORed with
+/// existing pixels, and VF is set to 1 if any pixels are erased (collision).
+///
+/// # Collision Detection
+/// If any existing pixel is turned off by the XOR operation, VF is set to 1.
+/// This is used by games to detect when sprites overlap.
 struct Display(DecodedInstruction);
 impl Instruction for Display {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -380,6 +551,12 @@ impl Instruction for Display {
     }
 }
 
+/// Skips the next instruction if the specified key is pressed.
+///
+/// Implements the CHIP-8 instruction `EX9E` which checks if the key
+/// corresponding to the value in register Vx is currently pressed.
+/// If the key is pressed, the program counter is advanced by 2 bytes
+/// to skip the next instruction.
 struct SkipIfKeyPressed(DecodedInstruction);
 impl Instruction for SkipIfKeyPressed {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -395,6 +572,12 @@ impl Instruction for SkipIfKeyPressed {
     }
 }
 
+/// Skips the next instruction if the specified key is not pressed.
+///
+/// Implements the CHIP-8 instruction `EXA1` which checks if the key
+/// corresponding to the value in register Vx is currently not pressed.
+/// If the key is not pressed, the program counter is advanced by 2 bytes
+/// to skip the next instruction.
 struct SkipIfKeyNotPressed(DecodedInstruction);
 impl Instruction for SkipIfKeyNotPressed {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -410,6 +593,11 @@ impl Instruction for SkipIfKeyNotPressed {
     }
 }
 
+/// Sets register Vx to the current value of the delay timer.
+///
+/// Implements the CHIP-8 instruction `FX07` which reads the current
+/// value of the delay timer and stores it in register Vx. This allows
+/// programs to check timing and synchronize events.
 struct SetVxFromTimer(DecodedInstruction);
 impl Instruction for SetVxFromTimer {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -419,6 +607,11 @@ impl Instruction for SetVxFromTimer {
     }
 }
 
+/// Sets the delay timer to the value in register Vx.
+///
+/// Implements the CHIP-8 instruction `FX15` which sets the delay timer
+/// to the value stored in register Vx. The delay timer counts down at
+/// 60 Hz until it reaches zero.
 struct SetDelayTimer(DecodedInstruction);
 impl Instruction for SetDelayTimer {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -428,6 +621,11 @@ impl Instruction for SetDelayTimer {
     }
 }
 
+/// Sets the sound timer to the value in register Vx.
+///
+/// Implements the CHIP-8 instruction `FX18` which sets the sound timer
+/// to the value stored in register Vx. The sound timer counts down at
+/// 60 Hz, and a beep sound is played while the timer is non-zero.
 struct SetSoundTimer(DecodedInstruction);
 impl Instruction for SetSoundTimer {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -437,6 +635,11 @@ impl Instruction for SetSoundTimer {
     }
 }
 
+/// Adds the value in register Vx to the index register.
+///
+/// Implements the CHIP-8 instruction `FX1E` which adds the value in
+/// register Vx to the current value of the index register (I).
+/// Uses wrapping arithmetic to handle overflow.
 struct AddToIndex(DecodedInstruction);
 impl Instruction for AddToIndex {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -447,6 +650,11 @@ impl Instruction for AddToIndex {
     }
 }
 
+/// Sets the index register to the location of a hexadecimal character sprite.
+///
+/// Implements the CHIP-8 instruction `FX29` which sets the index register
+/// to the memory location of the sprite data for the hexadecimal digit
+/// stored in register Vx. Only the lower 4 bits of Vx are used (0-F).
 struct FontChar(DecodedInstruction);
 impl Instruction for FontChar {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -457,6 +665,12 @@ impl Instruction for FontChar {
     }
 }
 
+/// Stores the binary-coded decimal representation of register Vx.
+///
+/// Implements the CHIP-8 instruction `FX33` which takes the decimal value
+/// in register Vx and stores the hundreds digit at I, tens digit at I+1,
+/// and ones digit at I+2. This converts a binary number to its decimal
+/// representation for display purposes.
 struct BinaryCodedDecimal(DecodedInstruction);
 impl Instruction for BinaryCodedDecimal {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -470,6 +684,12 @@ impl Instruction for BinaryCodedDecimal {
     }
 }
 
+/// Stores registers V0 through Vx in memory starting at the index register.
+///
+/// Implements the CHIP-8 instruction `FX55` which stores the values from registers
+/// V0 through Vx (inclusive) into memory starting at the address stored in the
+/// index register (I). After the operation, the index register is incremented
+/// by x+1 to point to the next available memory location.
 struct Store(DecodedInstruction);
 impl Instruction for Store {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -486,6 +706,12 @@ impl Instruction for Store {
     }
 }
 
+/// Loads memory values into registers V0 through Vx from the index register location.
+///
+/// Implements the CHIP-8 instruction `FX65` which loads values from memory starting
+/// at the address stored in the index register (I) into registers V0 through Vx
+/// (inclusive). After the operation, the index register is incremented by x+1
+/// to point to the next available memory location.
 struct Load(DecodedInstruction);
 impl Instruction for Load {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
@@ -499,6 +725,17 @@ impl Instruction for Load {
     }
 }
 
+/// Waits for a key press and stores the pressed key value in register Vx.
+///
+/// Implements the CHIP-8 instruction `FX0A` which blocks execution until any
+/// key on the hexadecimal keypad is pressed. Once a key is pressed, its value
+/// (0-F) is stored in register Vx and the key is automatically released to
+/// ensure proper single-key semantics.
+///
+/// # Blocking Behavior
+/// If no key is currently pressed, the program counter is decremented by 2
+/// to repeat this instruction on the next cycle, effectively creating a
+/// busy-wait loop until a key becomes available.
 struct GetKey(DecodedInstruction);
 impl Instruction for GetKey {
     fn execute(&self, state: &mut Chip8State) -> anyhow::Result<()> {
