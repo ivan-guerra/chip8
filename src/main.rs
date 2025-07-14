@@ -1,5 +1,45 @@
+//! CHIP-8 Emulator
+//!
+//! A complete CHIP-8 virtual machine implementation with terminal-based display,
+//! audio output, and configurable execution parameters.
+//!
+//! # Features
+//!
+//! - **Complete Instruction Set**: All 35 CHIP-8 instructions implemented
+//! - **Terminal Display**: 64×32 pixel game screen rendered in terminal
+//! - **Audio Support**: Authentic beep sound using 440 Hz sine wave
+//! - **Configurable Timing**: Adjustable frame rate and instruction speed
+//! - **Keyboard Input**: Standard QWERTY to CHIP-8 keypad mapping
+//! - **ROM Loading**: Support for standard CHIP-8 ROM files
+//!
+//! # Usage
+//!
+//! Run the emulator with a ROM file:
+//!
+//! ```bash
+//! chip8 --rom-path rom/tests/games/2-ibm-logo.ch8
+//! ```
+//!
+//! Optional parameters:
+//! - `--frame-rate`: Display refresh rate (default: 60 Hz)
+//! - `--ips`: Instructions per second (default: 700)
+//!
+//! # Controls
+//!
+//! The CHIP-8 keypad is mapped to QWERTY keys:
+//!
+//! ```text
+//! CHIP-8 Keypad    QWERTY Keyboard
+//! 1 2 3 C          1 2 3 4
+//! 4 5 6 D          Q W E R
+//! 7 8 9 E          A S D F
+//! A 0 B F          Z X C V
+//! ```
+//!
+//! Press **Escape** to exit the emulator.
+
 use crate::emulator::Emulator;
-use crate::state::{Settings, DEFAULT_FRAME_RATE, DEFAULT_INSTRUCTIONS_PER_SECOND};
+use crate::state::{DEFAULT_FRAME_RATE, DEFAULT_INSTRUCTIONS_PER_SECOND, Settings};
 use clap::Parser;
 
 mod emulator;
