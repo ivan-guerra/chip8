@@ -556,7 +556,9 @@ impl Chip8State {
                 let current_pixel = self.display[index];
                 let new_pixel = (byte >> (7 - bit)) & 1 == 1;
 
-                collision = current_pixel && new_pixel;
+                if current_pixel && new_pixel {
+                    collision = true;
+                }
 
                 self.display.set(index, current_pixel ^ new_pixel);
             }
