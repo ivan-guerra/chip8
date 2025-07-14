@@ -1,4 +1,3 @@
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::anyhow;
@@ -13,52 +12,37 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
     Terminal,
 };
-use rodio::{source::SineWave, OutputStream, OutputStreamHandle, Sink};
+use rodio::{source::SineWave, OutputStream, Sink, Source};
 
 use crate::instruction::{decode, Instruction};
 use crate::state::{Chip8State, Settings, DISPLAY_HEIGHT, DISPLAY_WIDTH, MEM_SIZE};
 
-/// A simple toggleable beep (square wave) for CHIP-8
+const DEFAULT_FREQUENCY: f32 = 440.0;
+
 pub struct Beep {
-    sink: Arc<Mutex<Option<Sink>>>,
+    sink: Sink,
     #[allow(dead_code)]
     stream: OutputStream,
-    stream_handle: OutputStreamHandle,
-    freq: u32,
 }
 
 impl Beep {
-    /// Create a new Beep at the given frequency (Hz)
-    pub fn new(freq: u32) -> Self {
-        let (stream, stream_handle) = OutputStream::try_default().unwrap();
-        Self {
-            sink: Arc::new(Mutex::new(None)),
-            stream,
-            stream_handle,
-            freq,
-        }
+    pub fn new(freq: f32) -> anyhow::Result<Self> {
+        let (stream, stream_handle) = OutputStream::try_default()?;
+        let sink = Sink::try_new(&stream_handle)?;
+        let source = SineWave::new(freq).repeat_infinite();
+
+        sink.append(source);
+        sink.pause();
+
+        Ok(Self { sink, stream })
     }
 
-    /// Start the beep (if not already beeping)
-    pub fn on(&self) {
-        let mut sink_guard = self.sink.lock().unwrap();
-        if sink_guard.is_some() {
-            // Already beeping
-            return;
-        }
-        let sink = Sink::try_new(&self.stream_handle).unwrap();
-        // SineWave is infinite, so as long as sink is alive, it beeps
-        sink.append(SineWave::new(self.freq as f32));
-        sink.play();
-        *sink_guard = Some(sink);
+    pub fn on(&mut self) {
+        self.sink.play();
     }
 
-    /// Stop the beep
-    pub fn off(&self) {
-        let mut sink_guard = self.sink.lock().unwrap();
-        if let Some(sink) = sink_guard.take() {
-            sink.stop();
-        }
+    pub fn off(&mut self) {
+        self.sink.pause();
     }
 }
 
@@ -143,11 +127,11 @@ impl Emulator {
         decode((high_byte << 8) | low_byte)
     }
 
-    pub fn new(settings: Settings) -> Self {
-        Emulator {
+    pub fn new(settings: Settings) -> anyhow::Result<Self> {
+        Ok(Emulator {
             state: Chip8State::new(settings),
-            beeper: Beep::new(440),
-        }
+            beeper: Beep::new(DEFAULT_FREQUENCY)?,
+        })
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
@@ -185,6 +169,7 @@ impl Emulator {
             terminal.try_draw(|frame| -> std::io::Result<()> {
                 self.state.delay_timer = self.state.delay_timer.saturating_sub(1);
                 self.state.sound_timer = self.state.sound_timer.saturating_sub(1);
+
                 if self.state.sound_timer == 0 {
                     self.beeper.off();
                 } else {

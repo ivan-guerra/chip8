@@ -23,7 +23,7 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let settings = Settings::new(args.frame_rate, args.ips, args.rom_path);
-    let mut emulator = Emulator::new(settings);
+    let mut emulator = Emulator::new(settings)?;
 
     emulator.run()?;
 
